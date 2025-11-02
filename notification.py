@@ -104,21 +104,28 @@ class Notification:
 
 
 def _send_discord_webhook(self, webhook_url, message: str):
-    # 1) Telegram 우선
+    """
+    Telegram 우선 전송:
+    - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID가 있으면 Telegram으로 보냄
+    - (옵션) Discord webhook_url이 유효하면 fallback
+    - 둘 다 없으면 skip
+    """
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+    # 1) Telegram 우선
     if token and chat_id:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
         try:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
             r = requests.post(url, json=payload, timeout=10)
             r.raise_for_status()
+            return
         except Exception as e:
             print(f"[notify] Telegram send failed: {e}")
-        return
 
     # 2) (옵션) Discord fallback
-    if webhook_url and webhook_url.startswith(("http://", "https://")):
+    if isinstance(webhook_url, str) and webhook_url.startswith(("http://", "https://")):
         try:
             requests.post(webhook_url, json={"content": message}, timeout=10)
         except Exception as e:
@@ -126,6 +133,4 @@ def _send_discord_webhook(self, webhook_url, message: str):
     else:
         print("[notify] No Telegram secrets and no valid Discord webhook; skip.")
 
-    
-    
-    
+
