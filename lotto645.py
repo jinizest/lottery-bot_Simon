@@ -93,10 +93,36 @@ class Lotto645:
             "gameCnt": cnt
         }
 
-    def _generate_body_for_manual(self, cnt: int) -> dict:
+    def _generate_body_for_manual(self, cnt: int, manual_numbers: list) -> dict:
+        """
+        매뉴얼 모드에서 요청 데이터를 생성합니다.
+        :param cnt: 구매할 게임 수 (1~5)
+        :param manual_numbers: 사용자가 선택한 로또 번호 리스트
+        :return: 요청 데이터 딕셔너리
+        """
         assert type(cnt) == int and 1 <= cnt <= 5
+        assert type(manual_numbers) == list and len(manual_numbers) == cnt
+        for numbers in manual_numbers:
+            assert type(numbers) == list and len(numbers) == 6
+            assert all(1 <= num <= 45 for num in numbers)  # 번호는 1~45 사이여야 함
 
-        raise NotImplementedError()
+        SLOTS = ["A", "B", "C", "D", "E"]  # 게임 슬롯 (최대 5개)
+
+        return {
+            "round": self._get_round(),
+            "nBuyAmount": str(1000 * cnt),
+            "param": json.dumps(
+                [
+                    {
+                        "genType": "1",  # 매뉴얼 모드
+                        "arrGameChoiceNum": numbers,
+                        "alpabet": slot,
+                    }
+                    for numbers, slot in zip(manual_numbers, SLOTS[:cnt])
+                ]
+            ),
+            "gameCnt": cnt,
+        }
 
     def _getRequirements(self, headers: dict) -> list: 
         org_headers = headers.copy()

@@ -2,7 +2,7 @@ import re
 import os, requests
 
 class Notification:
-    def send_lotto_buying_message(self, body: dict, token: str, chat_id: str) -> None:
+    def send_lotto_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
         try:
             result = body.get("result", {})
             result_msg = result.get("resultMsg", "FAILURE").upper()
@@ -10,16 +10,16 @@ class Notification:
 
             if result_msg != "SUCCESS":
                 buy_round = result.get("buyRound", "알 수 없음")
-                message = f"{buy_round}회 로또 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
+                message = f"{userid}님, {buy_round}회 로또 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
                 self._send_telegram(token, chat_id, message)
                 return
 
             lotto_number_str = self.make_lotto_number_message(result.get("arrGameChoiceNum", []))
             buy_round = result.get("buyRound", "알 수 없음")
-            message = f"{buy_round}회 로또 구매 완료 :moneybag: 남은잔액 : {balance}\n```{lotto_number_str}```"
+            message = f"{userid}님, {buy_round}회 로또 구매 완료 :moneybag: 남은잔액 : {balance}\n```{lotto_number_str}```"
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
-            error_message = f"로또 구매 처리 중 오류 발생: {e}"
+            error_message = f"{userid}님, 로또 구매 처리 중 오류 발생: {e}"
             self._send_telegram(token, chat_id, error_message)
 
     def make_lotto_number_message(self, lotto_number: list) -> str:
@@ -36,7 +36,7 @@ class Notification:
         
         return lotto_number
 
-    def send_win720_buying_message(self, body: dict, token: str, chat_id: str) -> None:
+    def send_win720_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
         try:
             result_code = body.get("resultCode", "UNKNOWN")
             result_msg = body.get("resultMsg", "알 수 없는 오류")
@@ -44,16 +44,16 @@ class Notification:
 
             if result_code != '100':
                 win720_round = result_msg.split("|")[3] if "|" in result_msg else "알 수 없음"
-                message = f"{win720_round}회 연금복권 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
+                message = f"{userid}님, {win720_round}회 연금복권 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
                 self._send_telegram(token, chat_id, message)
                 return
 
             win720_round = result_msg.split("|")[3]
             win720_number_str = self.make_win720_number_message(body.get("saleTicket", ""))
-            message = f"{win720_round}회 연금복권 구매 완료 :moneybag: 남은잔액 : {balance}\n```\n{win720_number_str}```"
+            message = f"{userid}님, {win720_round}회 연금복권 구매 완료 :moneybag: 남은잔액 : {balance}\n```\n{win720_number_str}```"
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
-            error_message = f"연금복권 구매 처리 중 오류 발생: {e}"
+            error_message = f"{userid}님, 연금복권 구매 처리 중 오류 발생: {e}"
             self._send_telegram(token, chat_id, error_message)
 
     def make_win720_number_message(self, win720_number: str) -> str:
@@ -63,7 +63,7 @@ class Notification:
             formatted_numbers.append(formatted_number)
         return "\n".join(formatted_numbers)
 
-    def send_lotto_winning_message(self, winning: dict, token: str, chat_id: str) -> None: 
+    def send_lotto_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None: 
         assert type(winning) == dict
         assert type(token) == str
         assert type(chat_id) == str
@@ -96,15 +96,15 @@ class Notification:
             formatted_results = "\n".join(formatted_lines)
 
             if winning['money'] != "-":
-                winning_message = f"로또 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
+                winning_message = f"{userid}님, 로또 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
             else:
-                winning_message = f"로또 *{winning['round']}회* - 다음 기회에... 🫠"
+                winning_message = f"{userid}님, 로또 *{winning['round']}회* - 다음 기회에... 🫠"
 
             self._send_telegram(token, chat_id, f"```ini\n{formatted_results}```\n{winning_message}")
         except KeyError:
             return
 
-    def send_win720_winning_message(self, winning: dict, token: str, chat_id: str) -> None: 
+    def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None: 
         assert type(winning) == dict
         assert type(token) == str
         assert type(chat_id) == str
@@ -114,11 +114,13 @@ class Notification:
             money = winning["money"]
 
             if winning['money'] != "-":
-                message = f"연금복권 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
+                message = f"{userid}님, 연금복권 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
+            else:
+                message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
 
             self._send_telegram(token, chat_id, message)
         except KeyError:
-            message = f"연금복권 - 다음 기회에... 🫠"
+            message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
             self._send_telegram(token, chat_id, message)
             return
 
