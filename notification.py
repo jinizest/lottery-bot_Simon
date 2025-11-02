@@ -1,5 +1,5 @@
-import requests
 import re
+import os, requests
 
 class Notification:
     def send_lotto_buying_message(self, body: dict, webhook_url: str) -> None:
@@ -102,6 +102,30 @@ class Notification:
             self._send_discord_webhook(webhook_url, message)
             return
 
-    def _send_discord_webhook(self, webhook_url: str, message: str) -> None:        
-        payload = { "content": message }
-        requests.post(webhook_url, json=payload)
+
+def _send_discord_webhook(self, webhook_url, message: str):
+    # 1) Telegram 우선
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if token and chat_id:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+        try:
+            r = requests.post(url, json=payload, timeout=10)
+            r.raise_for_status()
+        except Exception as e:
+            print(f"[notify] Telegram send failed: {e}")
+        return
+
+    # 2) (옵션) Discord fallback
+    if webhook_url and webhook_url.startswith(("http://", "https://")):
+        try:
+            requests.post(webhook_url, json={"content": message}, timeout=10)
+        except Exception as e:
+            print(f"[notify] Discord send failed: {e}")
+    else:
+        print("[notify] No Telegram secrets and no valid Discord webhook; skip.")
+
+    
+    
+    
