@@ -2,8 +2,9 @@ import re
 import os, requests
 
 class Notification:
-    def send_lotto_buying_message(self, body: dict, webhook_url: str) -> None:
-        # assert type(webhook_url) == str
+    def send_lotto_buying_message(self, body: dict, token: str, chat_id: str) -> None:
+        assert type(token) == str
+        assert type(chat_id) == str
 
         result = body.get("result", {})
         if result.get("resultMsg", "FAILURE").upper() != "SUCCESS":  
@@ -11,7 +12,7 @@ class Notification:
 
         lotto_number_str = self.make_lotto_number_message(result["arrGameChoiceNum"])
         message = f"{result['buyRound']}회 로또 구매 완료 :moneybag: 남은잔액 : {body['balance']}\n```{lotto_number_str}```"
-        self._send_discord_webhook(webhook_url, message)
+        self._send_telegram(token, chat_id, message)
 
     def make_lotto_number_message(self, lotto_number: list) -> str:
         assert type(lotto_number) == list
@@ -27,7 +28,7 @@ class Notification:
         
         return lotto_number
 
-    def send_win720_buying_message(self, body: dict, webhook_url: str) -> None:
+    def send_win720_buying_message(self, body: dict, token: str, chat_id: str) -> None:
         
         if body.get("resultCode") != '100':  
             return       
@@ -36,7 +37,7 @@ class Notification:
 
         win720_number_str = self.make_win720_number_message(body.get("saleTicket"))
         message = f"{win720_round}회 연금복권 구매 완료 :moneybag: 남은잔액 : {body['balance']}\n```\n{win720_number_str}```"
-        self._send_discord_webhook(webhook_url, message)
+        self._send_telegram(token, chat_id, message)
 
     def make_win720_number_message(self, win720_number: str) -> str:
         formatted_numbers = []
@@ -45,9 +46,10 @@ class Notification:
             formatted_numbers.append(formatted_number)
         return "\n".join(formatted_numbers)
 
-    def send_lotto_winning_message(self, winning: dict, webhook_url: str) -> None: 
+    def send_lotto_winning_message(self, winning: dict, token: str, chat_id: str) -> None: 
         assert type(winning) == dict
-        assert type(webhook_url) == str
+        assert type(token) == str
+        assert type(chat_id) == str
 
         try: 
             round = winning["round"]
@@ -81,13 +83,14 @@ class Notification:
             else:
                 winning_message = f"로또 *{winning['round']}회* - 다음 기회에... 🫠"
 
-            self._send_discord_webhook(webhook_url, f"```ini\n{formatted_results}```\n{winning_message}")
+            self._send_telegram(token, chat_id, f"```ini\n{formatted_results}```\n{winning_message}")
         except KeyError:
             return
 
-    def send_win720_winning_message(self, winning: dict, webhook_url: str) -> None: 
+    def send_win720_winning_message(self, winning: dict, token: str, chat_id: str) -> None: 
         assert type(winning) == dict
-        assert type(webhook_url) == str
+        assert type(token) == str
+        assert type(chat_id) == str
 
         try: 
             round = winning["round"]
@@ -96,41 +99,24 @@ class Notification:
             if winning['money'] != "-":
                 message = f"연금복권 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
 
-            self._send_discord_webhook(webhook_url, message)
+            self._send_telegram(token, chat_id, message)
         except KeyError:
             message = f"연금복권 - 다음 기회에... 🫠"
-            self._send_discord_webhook(webhook_url, message)
+            self._send_telegram(token, chat_id, message)
             return
 
-
-def _send_discord_webhook(self, webhook_url, message: str):
-    """
-    Telegram 우선 전송:
-    - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID가 있으면 Telegram으로 보냄
-    - (옵션) Discord webhook_url이 유효하면 fallback
-    - 둘 다 없으면 skip
-    """
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-
-    # 1) Telegram 우선
-    if token and chat_id:
-        try:
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
-            r = requests.post(url, json=payload, timeout=10)
-            r.raise_for_status()
-            return
-        except Exception as e:
-            print(f"[notify] Telegram send failed: {e}")
-
-    # 2) (옵션) Discord fallback
-    if isinstance(webhook_url, str) and webhook_url.startswith(("http://", "https://")):
-        try:
-            requests.post(webhook_url, json={"content": message}, timeout=10)
-        except Exception as e:
-            print(f"[notify] Discord send failed: {e}")
-    else:
-        print("[notify] No Telegram secrets and no valid Discord webhook; skip.")
+    def _send_telegram(self, token: str, chat_id: str, message: str) -> None:
+        """
+        Telegram 메시지 전송:
+        - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID가 있으면 Telegram으로 보냄
+        """
+        if token and chat_id:
+            try:
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+                r = requests.post(url, json=payload, timeout=10)
+                r.raise_for_status()
+            except Exception as e:
+                print(f"[notify] Telegram send failed: {e}")
 
 

@@ -32,38 +32,42 @@ def check_winning_win720(authCtrl: auth.AuthController) -> dict:
     item = pension.check_winning(authCtrl)
     return item
 
-def send_message(mode: int, lottery_type: int, response: dict, webhook_url: str):
+def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_id: str):
     notify = notification.Notification()
 
     if mode == 0:
         if lottery_type == 0:
-            notify.send_lotto_winning_message(response, webhook_url)
+            notify.send_lotto_winning_message(response, token, chat_id)
         else:
-            notify.send_win720_winning_message(response, webhook_url)
+            notify.send_win720_winning_message(response, token, chat_id)
     elif mode == 1: 
         if lottery_type == 0:
-            notify.send_lotto_buying_message(response, webhook_url)
+            notify.send_lotto_buying_message(response, token, chat_id)
         else:
-            notify.send_win720_buying_message(response, webhook_url)
+            notify.send_win720_buying_message(response, token, chat_id)
 
 def check():
     load_dotenv()
 
     username = os.environ.get('USERNAME')
     password = os.environ.get('PASSWORD')
-    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL') 
-    discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+    telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+
+    if not telegram_bot_token or not telegram_chat_id:
+        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        return
 
     globalAuthCtrl = auth.AuthController()
     globalAuthCtrl.login(username, password)
     
     response = check_winning_lotto645(globalAuthCtrl)
-    send_message(0, 0, response=response, webhook_url=discord_webhook_url)
+    send_message(0, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id)
 
     time.sleep(10)
     
     response = check_winning_win720(globalAuthCtrl)
-    send_message(0, 1, response=response, webhook_url=discord_webhook_url)
+    send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id)
 
 def buy(): 
     
@@ -72,20 +76,24 @@ def buy():
     username = os.environ.get('USERNAME')
     password = os.environ.get('PASSWORD')
     count = int(os.environ.get('COUNT'))
-    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL') 
-    discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+    telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
     mode = "AUTO"
+
+    if not telegram_bot_token or not telegram_chat_id:
+        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        return
 
     globalAuthCtrl = auth.AuthController()
     globalAuthCtrl.login(username, password)
 
     response = buy_lotto645(globalAuthCtrl, count, mode) 
-    send_message(1, 0, response=response, webhook_url=discord_webhook_url)
+    send_message(1, 0, response=response,  token=telegram_bot_token, chat_id=telegram_chat_id)
 
     time.sleep(10)
 
     response = buy_win720(globalAuthCtrl, username) 
-    send_message(1, 1, response=response, webhook_url=discord_webhook_url)
+    send_message(1, 1, response=response,  token=telegram_bot_token, chat_id=telegram_chat_id)
 
 def run():
     if len(sys.argv) < 2:
