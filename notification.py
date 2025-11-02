@@ -3,7 +3,7 @@ import os, requests
 
 class Notification:
     def send_lotto_buying_message(self, body: dict, webhook_url: str) -> None:
-        assert type(webhook_url) == str
+        # assert type(webhook_url) == str
 
         result = body.get("result", {})
         if result.get("resultMsg", "FAILURE").upper() != "SUCCESS":  
