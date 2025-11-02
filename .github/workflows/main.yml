@@ -1,0 +1,27 @@
+name: Buy Now (manual)
+
+on:
+  workflow_dispatch: {}  # Actions 탭에 'Run workflow' 버튼 노출
+
+jobs:
+  buy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Run immediate buy
+        env:
+          USERNAME: ${{ secrets.USERNAME }}
+          PASSWORD: ${{ secrets.PASSWORD }}
+          COUNT: ${{ secrets.COUNT }}
+          # 텔레그램 알림 (Secrets로 등록)
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          # 로그인/개인정보 등 .env.sample의 필수 키 전부 매핑
+          # 예시) DLT_USER_ID, DLT_USER_PW, BIRTHDAY, PHONE 등
+          # DLT_USER_ID: ${{ secrets.DLT_USER_ID }}
+          # ...
+        run: python3 controller.py buy
