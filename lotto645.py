@@ -42,7 +42,8 @@ class Lotto645:
         self, 
         auth_ctrl: auth.AuthController, 
         cnt: int, 
-        mode: Lotto645Mode
+        mode: Lotto645Mode, 
+        manual_numbers: list = None  # manual_numbers 매개변수 추가
     ) -> dict:
         assert type(auth_ctrl) == auth.AuthController
         assert type(cnt) == int and 1 <= cnt <= 5
@@ -51,10 +52,11 @@ class Lotto645:
         headers = self._generate_req_headers(auth_ctrl)
         requirements = self._getRequirements(headers)
 
+        # AUTO 모드와 MANUAL 모드에 따라 요청 데이터 생성
         data = (
             self._generate_body_for_auto_mode(cnt, requirements)
             if mode == Lotto645Mode.AUTO
-            else self._generate_body_for_manual(cnt)
+            else self._generate_body_for_manual(cnt, manual_numbers)
         )
 
         body = self._try_buying(headers, data)
