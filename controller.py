@@ -9,9 +9,11 @@ import notification
 import time
 
 
-def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers=None):
+def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers: list = None):
     lotto = lotto645.Lotto645()
     _mode = lotto645.Lotto645Mode[mode.upper()]
+    if _mode == lotto645.Lotto645Mode.MANUAL:
+        assert manual_numbers is not None, "수동 모드에서는 manual_numbers가 필요합니다."
     response = lotto.buy_lotto645(authCtrl, cnt, _mode, manual_numbers=manual_numbers)
     response['balance'] = lotto.get_balance(auth_ctrl=authCtrl)
     return response
