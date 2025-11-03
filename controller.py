@@ -167,7 +167,7 @@ def buy():
             response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        time.sleep(5)
+        time.sleep(10)
 
         # 수동 구매 처리
         if manual_count > 0:
