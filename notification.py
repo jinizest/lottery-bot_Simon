@@ -104,29 +104,86 @@ class Notification:
         except KeyError:
             return
 
-    def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
+    def send_win720_winning_message(self, *args, **kwargs) -> None:
         """
-        Telegram-only handler for win720 winning messages.
+        Handle win720 winning messages for different call signatures.
 
-        Resilient to missing keys in the `winning` dict to avoid KeyError.
+        Supported usages:
+        - Telegram flow (used by controller.py in this repo):
+            send_win720_winning_message(userid: str, winning: dict, token: str, chat_id: str)
+
+        - Webhook flow (some CI/workflows expect this):
+            send_win720_winning_message(winning: dict, webhook_url: str)
+
+        This function uses safe dict access to avoid KeyError and logs
+        errors instead of raising, so notification paths don't break the
+        main flow.
         """
         try:
-            # ensure types
-            assert isinstance(winning, dict)
+            # Telegram style: userid, winning, token, chat_id
+            if len(args) == 4:
+                userid, winning, token, chat_id = args
+                if not isinstance(winning, dict):
+                    print("[notify] send_win720_winning_message: winning must be a dict")
+                    return
 
-            round_val = winning.get("round", "알 수 없음")
-            money = winning.get("money", "-")
+                round_val = winning.get("round", "알 수 없음")
+                money = winning.get("money", "-")
 
-            if money != "-":
-                message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
-            else:
-                message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
+                if money != "-":
+                    message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
+                else:
+                    message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
 
-            self._send_telegram(token, chat_id, message)
-        except AssertionError:
-            print("[notify] send_win720_winning_message: winning must be a dict")
+                self._send_telegram(token, chat_id, message)
+                return
+
+            # Webhook style: winning, webhook_url
+            if len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
+                winning, webhook_url = args
+                round_val = winning.get("round", "알 수 없음")
+                money = winning.get("money", "-")
+
+                if money != "-":
+                    message = f"연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
+                else:
+                    message = f"연금복권 - 다음 기회에... 🫠"
+
+                # send to discord webhook helper (no-op if webhook_url empty)
+                if hasattr(self, '_send_discord_webhook'):
+                    self._send_discord_webhook(webhook_url, message)
+                else:
+                    print("[notify] Discord webhook helper not available")
+                return
+
+            # Try kwargs fallback (explicit names)
+            winning = kwargs.get('winning')
+            webhook_url = kwargs.get('webhook_url')
+            token = kwargs.get('token')
+            chat_id = kwargs.get('chat_id')
+            userid = kwargs.get('userid')
+
+            if webhook_url and isinstance(winning, dict):
+                round_val = winning.get("round", "알 수 없음")
+                money = winning.get("money", "-")
+                message = f"연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉" if money != "-" else "연금복권 - 다음 기회에... 🫠"
+                if hasattr(self, '_send_discord_webhook'):
+                    self._send_discord_webhook(webhook_url, message)
+                else:
+                    print("[notify] Discord webhook helper not available")
+                return
+
+            if token and chat_id and userid and isinstance(winning, dict):
+                round_val = winning.get("round", "알 수 없음")
+                money = winning.get("money", "-")
+                message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉" if money != "-" else f"{userid}님, 연금복권 - 다음 기회에... 🫠"
+                self._send_telegram(token, chat_id, message)
+                return
+
+            print("[notify] send_win720_winning_message: unsupported call signature or missing data")
         except Exception as e:
             print(f"[notify] send_win720_winning_message failed: {e}")
+            return
 
     def _send_telegram(self, token: str, chat_id: str, message: str) -> None:
         """
