@@ -52,7 +52,7 @@ def check():
     load_dotenv()
 
     usernames = os.environ.get('USERNAME', '').splitlines()  # 개행으로 구분된 USERNAME 처리
-    print(usernames)
+    # print(usernames)
     passwords = os.environ.get('PASSWORD', '').splitlines()  # 개행으로 구분된 PASSWORD 처리
     telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -97,12 +97,12 @@ def buy():
     load_dotenv()
 
     usernames = os.environ.get('USERNAME', '').splitlines()  # 개행으로 구분된 USERNAME 처리
-    print(usernames)
+    # print(usernames)
     passwords = os.environ.get('PASSWORD', '').splitlines()  # 개행으로 구분된 PASSWORD 처리
     auto_count = int(os.environ.get('AUTO_COUNT', 5))  # 자동 구매 개수
     manual_count = int(os.environ.get('MANUAL_COUNT', 0))  # 수동 구매 개수
     manual_numbers_raw = os.environ.get('MANUAL_NUMBERS', '').splitlines()  # 개행으로 구분된 수동 번호
-    print(manual_numbers_raw)
+    # print(manual_numbers_raw)
     telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
@@ -140,19 +140,50 @@ def buy():
         print(f"Processing for user: {username}")
 
         globalAuthCtrl = auth.AuthController()
-        globalAuthCtrl.login(username, password)
+        # Ensure per-user fresh session cookies when using the shared HttpClient
+        try:
+            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
+                try:
+                    globalAuthCtrl.http_client.session.cookies.clear()
+                except Exception:
+                    pass
+
+            try:
+                globalAuthCtrl.login(username, password)
+            except Exception as e:
+                print(f"[controller] 로그인 실패 for user {username}: {e}")
+                # Skip this user and continue
+                continue
+        except Exception:
+            # Best-effort cookie clear; proceed to login and let login handle errors
+            try:
+                globalAuthCtrl.login(username, password)
+            except Exception as e:
+                print(f"[controller] 로그인 실패 for user {username}: {e}")
+                continue
 
         # 자동 구매 처리
         if auto_count > 0:
             response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        time.sleep(10)
+        time.sleep(5)
 
         # 수동 구매 처리
         if manual_count > 0:
             response = buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers)
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+            
+        time.sleep(10)
+
+        # 연금 복권 구매 처리
+        try:
+            response = buy_win720(globalAuthCtrl, username)
+            send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+        except Exception as e:
+            print(f"[controller] 연금복권 구매 실패 for user {username}: {e}")
+            # continue to next user
+            continue
 
 
 def run():
