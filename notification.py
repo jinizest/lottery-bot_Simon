@@ -104,25 +104,29 @@ class Notification:
         except KeyError:
             return
 
-    def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None: 
-        assert type(winning) == dict
-        assert type(token) == str
-        assert type(chat_id) == str
+    def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
+        """
+        Telegram-only handler for win720 winning messages.
 
-        try: 
-            round = winning["round"]
-            money = winning["money"]
+        Resilient to missing keys in the `winning` dict to avoid KeyError.
+        """
+        try:
+            # ensure types
+            assert isinstance(winning, dict)
 
-            if winning['money'] != "-":
-                message = f"{userid}님, 연금복권 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
+            round_val = winning.get("round", "알 수 없음")
+            money = winning.get("money", "-")
+
+            if money != "-":
+                message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
             else:
                 message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
 
             self._send_telegram(token, chat_id, message)
-        except KeyError:
-            message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
-            self._send_telegram(token, chat_id, message)
-            return
+        except AssertionError:
+            print("[notify] send_win720_winning_message: winning must be a dict")
+        except Exception as e:
+            print(f"[notify] send_win720_winning_message failed: {e}")
 
     def _send_telegram(self, token: str, chat_id: str, message: str) -> None:
         """
@@ -137,5 +141,21 @@ class Notification:
                 r.raise_for_status()
             except Exception as e:
                 print(f"[notify] Telegram send failed: {e}")
+
+    def _send_discord_webhook(self, webhook_url: str, content: str) -> None:
+        """
+        Send a simple message to a Discord webhook URL using 'content' field.
+        """
+        if not webhook_url:
+            print("[notify] _send_discord_webhook: webhook_url is empty")
+            return
+
+        try:
+            payload = {"content": content}
+            r = requests.post(webhook_url, json=payload, timeout=10)
+            r.raise_for_status()
+        except Exception as e:
+            print(f"[notify] Discord webhook send failed: {e}")
+
 
 
