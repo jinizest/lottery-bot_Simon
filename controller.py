@@ -68,7 +68,12 @@ def check():
         print(f"Processing for user: {username}")
 
         globalAuthCtrl = auth.AuthController()
-        globalAuthCtrl.login(username, password)
+        try:
+            globalAuthCtrl.login(username, password)
+        except Exception as e:
+            print(f"[controller] 로그인 실패 for user {username}: {e}")
+            # Skip this user and continue with next one
+            continue
 
         response = check_winning_lotto645(globalAuthCtrl)
         send_message(0, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)

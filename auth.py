@@ -59,12 +59,31 @@ class AuthController:
 
     def _get_j_session_id_from_response(self, res: requests.Response):
         assert type(res) == requests.Response
-
+        # First try: requests' cookie jar
         for cookie in res.cookies:
             if cookie.name == "JSESSIONID":
                 return cookie.value
 
-        raise KeyError("JSESSIONID cookie is not set in response")
+        # Second try: parse Set-Cookie header if present
+        set_cookie = res.headers.get("Set-Cookie", "")
+        if set_cookie:
+            import re
+
+            m = re.search(r"JSESSIONID=([^;\s]+)", set_cookie)
+            if m:
+                return m.group(1)
+
+        # If still not found, raise a more informative error to help debugging
+        snippet = ""
+        try:
+            snippet = res.text[:500]
+        except Exception:
+            snippet = "<could not read response body>"
+
+        raise KeyError(
+            f"JSESSIONID cookie is not set in response (status={res.status_code}). "
+            f"Set-Cookie: {set_cookie!r}. Response body snippet: {snippet!r}"
+        )
 
     def _generate_req_headers(self, j_session_id: str):
         assert type(j_session_id) == str
