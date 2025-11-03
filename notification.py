@@ -1,5 +1,6 @@
 import re
 import os, requests
+import html
 
 class Notification:
     def send_lotto_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
@@ -16,7 +17,9 @@ class Notification:
 
             lotto_number_str = self.make_lotto_number_message(result.get("arrGameChoiceNum", []))
             buy_round = result.get("buyRound", "알 수 없음")
-            message = f"{userid}님, {buy_round}회 로또 구매 완료 :moneybag: 남은잔액 : {balance}\n```{lotto_number_str}```"
+            # Use HTML <pre> for code-style block (Telegram parse_mode=HTML)
+            lotto_block = f"<pre>{html.escape(lotto_number_str)}</pre>"
+            message = f"{html.escape(userid + '님, ' + str(buy_round) + '회 로또 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{lotto_block}"
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
             error_message = f"{userid}님, 로또 구매 처리 중 오류 발생: {e}"
@@ -50,7 +53,9 @@ class Notification:
 
             win720_round = result_msg.split("|")[3]
             win720_number_str = self.make_win720_number_message(body.get("saleTicket", ""))
-            message = f"{userid}님, {win720_round}회 연금복권 구매 완료 :moneybag: 남은잔액 : {balance}\n```\n{win720_number_str}```"
+            # Use HTML <pre> for code-style block (Telegram parse_mode=HTML)
+            win720_block = f"<pre>{html.escape(win720_number_str)}</pre>"
+            message = f"{html.escape(userid + '님, ' + str(win720_round) + '회 연금복권 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{win720_block}"
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
             error_message = f"{userid}님, 연금복권 구매 처리 중 오류 발생: {e}"
@@ -100,7 +105,10 @@ class Notification:
             else:
                 winning_message = f"{userid}님, 로또 *{winning['round']}회* - 다음 기회에... 🫠"
 
-            self._send_telegram(token, chat_id, f"```ini\n{formatted_results}```\n{winning_message}")
+            # Send formatted results inside an HTML <pre> block and escape content
+            results_block = f"<pre>{html.escape(formatted_results)}</pre>"
+            # escape winning_message too to avoid accidental HTML injection
+            self._send_telegram(token, chat_id, f"{results_block}\n{html.escape(winning_message)}")
         except KeyError:
             return
 
