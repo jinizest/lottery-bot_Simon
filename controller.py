@@ -88,10 +88,12 @@ def buy():
     load_dotenv()
 
     usernames = os.environ.get('USERNAME', '').splitlines()  # 개행으로 구분된 USERNAME 처리
+    print(usernames)
     passwords = os.environ.get('PASSWORD', '').splitlines()  # 개행으로 구분된 PASSWORD 처리
     auto_count = int(os.environ.get('AUTO_COUNT', 5))  # 자동 구매 개수
     manual_count = int(os.environ.get('MANUAL_COUNT', 0))  # 수동 구매 개수
     manual_numbers_raw = os.environ.get('MANUAL_NUMBERS', '').splitlines()  # 개행으로 구분된 수동 번호
+    print(manual_numbers_raw)
     telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
