@@ -167,32 +167,7 @@ def buy():
             response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        time.sleep(10)
-        
-        ################## 자동 수동 구매 간 로그인 리셋? #####################
-        globalAuthCtrl = auth.AuthController()
-        # Ensure per-user fresh session cookies when using the shared HttpClient
-        try:
-            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
-                try:
-                    globalAuthCtrl.http_client.session.cookies.clear()
-                except Exception:
-                    pass
-
-            try:
-                globalAuthCtrl.login(username, password)
-            except Exception as e:
-                print(f"[controller] 로그인 실패 for user {username}: {e}")
-                # Skip this user and continue
-                continue
-        except Exception:
-            # Best-effort cookie clear; proceed to login and let login handle errors
-            try:
-                globalAuthCtrl.login(username, password)
-            except Exception as e:
-                print(f"[controller] 로그인 실패 for user {username}: {e}")
-                continue
-        ################## 자동 수동 구매 간 로그인 리셋? #####################
+        time.sleep(5)
         
         # 수동 구매 처리
         if manual_count > 0:

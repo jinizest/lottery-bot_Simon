@@ -56,7 +56,7 @@ class Lotto645:
         data = (
             self._generate_body_for_auto_mode(cnt, requirements)
             if mode == Lotto645Mode.AUTO
-            else self._generate_body_for_manual(cnt, manual_numbers)
+            else self._generate_body_for_manual(cnt, requirements, manual_numbers)
         )
 
         body = self._try_buying(headers, data)
@@ -95,13 +95,14 @@ class Lotto645:
             "gameCnt": cnt
         }
 
-    def _generate_body_for_manual(self, cnt: int, manual_numbers: list) -> dict:
+    def _generate_body_for_manual(self, cnt: int,requirements: list, manual_numbers: list) -> dict:
         """
         매뉴얼 모드에서 요청 데이터를 생성합니다.
         :param cnt: 구매할 게임 수 (1~5)
         :param manual_numbers: 사용자가 선택한 로또 번호 리스트
         :return: 요청 데이터 딕셔너리
         """
+
         assert type(cnt) == int and 1 <= cnt <= 5
         assert type(manual_numbers) == list and len(manual_numbers) == cnt
         for numbers in manual_numbers:
@@ -112,6 +113,7 @@ class Lotto645:
 
         return {
             "round": self._get_round(),
+            "direct": requirements[0],  # TODO: test if this can be comment
             "nBuyAmount": str(1000 * cnt),
             "param": json.dumps(
                 [
@@ -123,6 +125,8 @@ class Lotto645:
                     for numbers, slot in zip(manual_numbers, SLOTS[:cnt])
                 ]
             ),
+            'ROUND_DRAW_DATE' : requirements[1],
+            'WAMT_PAY_TLMT_END_DT' : requirements[2], 
             "gameCnt": cnt,
         }
 
