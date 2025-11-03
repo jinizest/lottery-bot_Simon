@@ -69,7 +69,15 @@ def check():
         print(f"Processing for user: {username}")
 
         globalAuthCtrl = auth.AuthController()
+        # Ensure per-user fresh session cookies: clear any cookies left in the shared HttpClient
         try:
+            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
+                try:
+                    globalAuthCtrl.http_client.session.cookies.clear()
+                except Exception:
+                    # best-effort; if clearing cookies fails, continue and try login
+                    pass
+
             globalAuthCtrl.login(username, password)
         except Exception as e:
             print(f"[controller] 로그인 실패 for user {username}: {e}")
