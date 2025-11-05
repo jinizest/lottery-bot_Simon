@@ -247,8 +247,10 @@ def run():
 
     if command == "buy":
         buy()
-    elif command in ("check", "check_win"):
+    elif command == "check":
         check()
+    elif command == "check_win":
+        check_win()
     else:
         print("Usage: python controller.py [buy|check|check_win]")
   
