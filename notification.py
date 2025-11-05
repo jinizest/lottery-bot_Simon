@@ -91,10 +91,10 @@ class Notification:
                     if '✨' in num:
                         formatted_nums.append(f"[{formatted_num}]")
                     else:
-                        formatted_nums.append(f" {formatted_num} ")
-                        
-                # 여기 폭을 5로 살짝 줄여서 우측 정렬 (더 붙이고 싶으면 4로)
-                COL_WIDTH = 5  # ← 4로 바꾸면 더 타이트
+                        formatted_nums.append(formatted_num)
+
+                # 더 좁은 폭으로 정렬해 한 줄 내에 표시되도록 한다
+                COL_WIDTH = 3
                 formatted_nums = [f"{num:>{COL_WIDTH}}" for num in formatted_nums]
 
                 formatted_line = f"{line_label_status} " + " ".join(formatted_nums)
