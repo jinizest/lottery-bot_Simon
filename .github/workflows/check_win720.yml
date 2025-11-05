@@ -1,0 +1,32 @@
+name: Check Winning for win720
+on:
+  schedule:
+    - cron: '0 12 * * 4'  # every Thursday at 9:00 PM (KST)
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [ubuntu-latest]
+    name: Check Winning
+    steps:  
+
+      - uses: actions/checkout@v3    
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip' # caching pip dependencies
+      - run: pip install -r requirements.txt
+
+      - name: Run Scripts
+        run: make check_win720
+        env:
+          USERNAME: ${{ secrets.USERNAME }}
+          PASSWORD: ${{ secrets.PASSWORD }}
+          COUNT: ${{ secrets.COUNT }}
+          AUTO_COUNT: ${{ secrets.AUTO_COUNT }}
+          MANUAL_COUNT: ${{ secrets.MANUAL_COUNT }}
+          MANUAL_NUMBERS_RAW: ${{ secrets.MANUAL_NUMBERS_RAW }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL:  ${{ secrets.DISCORD_WEBHOOK_URL }}
