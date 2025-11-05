@@ -107,7 +107,9 @@ class Lotto645:
         assert type(manual_numbers) == list and len(manual_numbers) == cnt
         for numbers in manual_numbers:
             assert type(numbers) == list and len(numbers) == 6
-            assert all(1 <= num <= 45 for num in numbers)  # 번호는 1~45 사이여야 함
+            for num in numbers:
+                assert type(num) == str and num.isdigit()
+                assert len(num) == 2  # 서버는 "01" 형태의 두 자리 문자열을 기대함
 
         SLOTS = ["A", "B", "C", "D", "E"]  # 게임 슬롯 (최대 5개)
 
@@ -119,7 +121,7 @@ class Lotto645:
                 [
                     {
                         "genType": "1",  # 매뉴얼 모드
-                        "arrGameChoiceNum": numbers,
+                        "arrGameChoiceNum": ",".join(numbers),
                         "alpabet": slot,
                     }
                     for numbers, slot in zip(manual_numbers, SLOTS[:cnt])
