@@ -87,7 +87,51 @@ def check():
         response = check_winning_lotto645(globalAuthCtrl)
         send_message(0, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        time.sleep(10)
+        # time.sleep(10)
+
+        # response = check_winning_win720(globalAuthCtrl)
+        # send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+def check_win720():
+    load_dotenv()
+
+    usernames = os.environ.get('USERNAME', '').splitlines()  # 개행으로 구분된 USERNAME 처리
+    # print(usernames)
+    passwords = os.environ.get('PASSWORD', '').splitlines()  # 개행으로 구분된 PASSWORD 처리
+    telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+
+    if not telegram_bot_token or not telegram_chat_id:
+        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        return
+
+    if len(usernames) != len(passwords):
+        print("USERNAME과 PASSWORD의 개수가 일치하지 않습니다.")
+        return
+
+    for username, password in zip(usernames, passwords):  # 각 사용자에 대해 반복
+        print(f"Processing for user: {username}")
+
+        globalAuthCtrl = auth.AuthController()
+        # Ensure per-user fresh session cookies: clear any cookies left in the shared HttpClient
+        try:
+            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
+                try:
+                    globalAuthCtrl.http_client.session.cookies.clear()
+                except Exception:
+                    # best-effort; if clearing cookies fails, continue and try login
+                    pass
+
+            globalAuthCtrl.login(username, password)
+        except Exception as e:
+            print(f"[controller] 로그인 실패 for user {username}: {e}")
+            # Skip this user and continue with next one
+            continue
+
+        # response = check_winning_lotto645(globalAuthCtrl)
+        # send_message(0, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+        # time.sleep(10)
 
         response = check_winning_win720(globalAuthCtrl)
         send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
