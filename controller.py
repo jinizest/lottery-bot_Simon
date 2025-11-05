@@ -92,7 +92,7 @@ def check():
         # response = check_winning_win720(globalAuthCtrl)
         # send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-def check_win720():
+def check_win():
     load_dotenv()
 
     usernames = os.environ.get('USERNAME', '').splitlines()  # 개행으로 구분된 USERNAME 처리
