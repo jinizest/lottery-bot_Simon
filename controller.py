@@ -124,10 +124,18 @@ def buy():
     manual_numbers = []
     for line in manual_numbers_raw:
         try:
-            numbers = list(map(int, line.split(',')))  # 쉼표로 구분된 번호를 정수 리스트로 변환
-            if len(numbers) != 6 or not all(1 <= num <= 45 for num in numbers):
-                raise ValueError("번호는 6개이며 각 번호는 1~45 사이여야 합니다.")
-            manual_numbers.append(numbers)
+            raw_numbers = [part.strip() for part in line.split(',') if part.strip()]
+            if len(raw_numbers) != 6:
+                raise ValueError("번호는 6개여야 합니다.")
+
+            formatted_numbers = []
+            for raw in raw_numbers:
+                num = int(raw)
+                if not 1 <= num <= 45:
+                    raise ValueError("각 번호는 1~45 사이여야 합니다.")
+                formatted_numbers.append(f"{num:02d}")
+
+            manual_numbers.append(formatted_numbers)
         except ValueError as e:
             print(f"수동 번호 처리 중 오류 발생: {e}")
             return
