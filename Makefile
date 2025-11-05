@@ -8,4 +8,4 @@ check:
 	python3 controller.py check
 
 check_win720:
-	python3 controller.py check_win720
+	python3 controller.py check_win
