@@ -199,10 +199,14 @@ def run():
         print("Usage: python controller.py [buy|check]")
         return
 
-    if sys.argv[1] == "buy":
+    command = sys.argv[1]
+
+    if command == "buy":
         buy()
-    elif sys.argv[1] == "check":
+    elif command in ("check", "check_win"):
         check()
+    else:
+        print("Usage: python controller.py [buy|check|check_win]")
   
 
 if __name__ == "__main__":
