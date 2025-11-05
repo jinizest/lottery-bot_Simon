@@ -208,17 +208,19 @@ class Lotto645:
         parameters = self._make_search_date()
 
         data = {
-            "nowPage": 1, 
+            "nowPage": 1,
             "searchStartDate": parameters["searchStartDate"],
             "searchEndDate": parameters["searchEndDate"],
             "winGrade": 2,
-            "lottoId": "LO40", 
+            "lottoId": "LO40",
             "sortOrder": "DESC"
         }
 
         result_data = {
             "data": "no winning data"
         }
+
+        lotto_entries = []
 
         try:
             res = self.http_client.post(
@@ -230,49 +232,90 @@ class Lotto645:
             html = res.text
             soup = BS(html, "html5lib")
 
-            winnings = soup.find("table", class_="tbl_data tbl_data_col").find_all("tbody")[0].find_all("td")
-
-            get_detail_info = winnings[3].find("a").get("href")
-
-            order_no, barcode, issue_no = get_detail_info.split("'")[1::2]
-            url = f"https://dhlottery.co.kr/myPage.do?method=lotto645Detail&orderNo={order_no}&barcode={barcode}&issueNo={issue_no}"
-
-            response = self.http_client.get(url)
-
-            soup = BS(response.text, "html5lib")
-
-            lotto_results = []
-
-            for li in soup.select("div.selected li"):
-                label = li.find("strong").find_all("span")[0].text.strip()
-                status = li.find("strong").find_all("span")[1].text.strip().replace("낙첨","0등")
-                nums = li.select("div.nums > span")
-
-                status = " ".join(status.split())
-
-                formatted_nums = []
-                for num in nums:
-                    ball = num.find("span", class_="ball_645")
-                    if ball:
-                        formatted_nums.append(f"✨{ball.text.strip()}")
-                    else:
-                        formatted_nums.append(num.text.strip())
-
-                lotto_results.append({
-                    "label": label,
-                    "status": status,
-                    "result": formatted_nums
-                })
-
-            if len(winnings) == 1:
+            table = soup.find("table", class_="tbl_data tbl_data_col")
+            if not table:
                 return result_data
 
+            tbody = table.find("tbody")
+            if not tbody:
+                return result_data
+
+            rows = tbody.find_all("tr")
+
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) < 8:
+                    continue
+
+                link = cells[3].find("a")
+                if not link or not link.get("href"):
+                    continue
+
+                detail_tokens = link.get("href").split("'")
+                if len(detail_tokens) < 6:
+                    continue
+
+                order_no, barcode, issue_no = detail_tokens[1], detail_tokens[3], detail_tokens[5]
+                url = (
+                    "https://dhlottery.co.kr/myPage.do?method=lotto645Detail"
+                    f"&orderNo={order_no}&barcode={barcode}&issueNo={issue_no}"
+                )
+
+                response = self.http_client.get(url)
+                detail_soup = BS(response.text, "html5lib")
+
+                round_info = cells[2].text.strip()
+                money = cells[6].text.strip()
+                purchased_date = cells[0].text.strip()
+                winning_date = cells[7].text.strip()
+
+                for li in detail_soup.select("div.selected li"):
+                    strong_spans = li.find("strong").find_all("span")
+                    if len(strong_spans) < 2:
+                        continue
+
+                    label = strong_spans[0].text.strip()
+                    status = strong_spans[1].text.strip().replace("낙첨", "0등")
+                    status = " ".join(status.split())
+
+                    nums = li.select("div.nums > span")
+
+                    formatted_nums = []
+                    for num in nums:
+                        ball = num.find("span", class_="ball_645")
+                        if ball:
+                            formatted_nums.append(f"✨{ball.text.strip()}")
+                        else:
+                            formatted_nums.append(num.text.strip())
+
+                    lotto_entries.append(
+                        {
+                            "label": f"{round_info} {label}",
+                            "status": status,
+                            "result": formatted_nums,
+                            "round": round_info,
+                            "money": money,
+                            "purchased_date": purchased_date,
+                            "winning_date": winning_date,
+                        }
+                    )
+
+                    if len(lotto_entries) >= 5:
+                        break
+
+                if len(lotto_entries) >= 5:
+                    break
+
+            if not lotto_entries:
+                return result_data
+
+            latest = lotto_entries[0]
             result_data = {
-                "round": winnings[2].text.strip(),
-                "money": winnings[6].text.strip(),
-                "purchased_date": winnings[0].text.strip(),
-                "winning_date": winnings[7].text.strip(),
-                "lotto_details": lotto_results
+                "round": latest.get("round", "-"),
+                "money": latest.get("money", "-"),
+                "purchased_date": latest.get("purchased_date", "-"),
+                "winning_date": latest.get("winning_date", "-"),
+                "lotto_details": lotto_entries,
             }
         except:
             pass
