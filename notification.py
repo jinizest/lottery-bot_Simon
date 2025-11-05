@@ -73,14 +73,23 @@ class Notification:
         assert type(token) == str
         assert type(chat_id) == str
 
-        try: 
-            round = winning["round"]
-            money = winning["money"]
+        try:
+            lotto_details = winning.get("lotto_details") or []
 
-            max_label_status_length = max(len(f"{line['label']} {line['status']}") for line in winning["lotto_details"])
+            if not lotto_details:
+                message = html.escape(f"{userid}님, 최근 로또 구매/당첨 이력이 없습니다.")
+                self._send_telegram(token, chat_id, message)
+                return
+
+            round_val = winning.get("round", "-")
+            money = winning.get("money", "-")
+
+            max_label_status_length = max(
+                len(f"{line['label']} {line['status']}") for line in lotto_details
+            )
 
             formatted_lines = []
-            for line in winning["lotto_details"]:
+            for line in lotto_details:
                 line_label_status = f"{line['label']} {line['status']}".ljust(max_label_status_length)
                 line_result = line["result"]
 
@@ -102,10 +111,10 @@ class Notification:
 
             formatted_results = "\n".join(formatted_lines)
 
-            if winning['money'] != "-":
-                winning_message = f"{userid}님, 로또 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
+            if money != "-":
+                winning_message = f"{userid}님, 로또 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
             else:
-                winning_message = f"{userid}님, 로또 *{winning['round']}회* - 다음 기회에... 🫠"
+                winning_message = f"{userid}님, 로또 *{round_val}회* - 다음 기회에... 🫠"
 
             # Send formatted results inside an HTML <pre> block and escape content
             results_block = f"<pre>{html.escape(formatted_results)}</pre>"
