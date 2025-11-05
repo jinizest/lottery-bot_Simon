@@ -7,5 +7,5 @@ buy:
 check:
 	python3 controller.py check
 
-check_win720:
+check_win:
 	python3 controller.py check_win
