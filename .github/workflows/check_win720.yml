@@ -1,7 +1,7 @@
 name: Check Winning for win720
 on:
   schedule:
-    - cron: '15 10 * * 4'  # cron 포맷 '분 시간 일 월 요일' every Thursday at 7:15 PM (KST)
+    - cron: '30 10 * * 4'  # cron 포맷 '분 시간 일 월 요일' every Thursday at 7:15 PM (KST)
   workflow_dispatch:
 
 jobs:
