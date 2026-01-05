@@ -126,58 +126,25 @@ class AuthController:
         return res
 
     def _update_auth_cred(self, login_response: requests.Response) -> None:
-        """Refresh the cached JSESSIONID after login.
+        """Refresh the cached session cookies after login.
 
-        Prefer the session's cookie jar because redirects may set the cookie
-        on subsequent requests. Fall back to the login response headers if the
-        cookie jar does not yet contain it so we do not fail when requests
-        misses a Set-Cookie during redirect handling.
+        Some environments report merge conflicts when the session cookie is set
+        on a redirect response or under a different cookie name. To avoid
+        brittle parsing, collect cookies from the session jar, the login
+        response, and any intermediate responses, then build a unified cookie
+        header and extract the JSESSIONID-equivalent value from that set.
         """
 
-        try:
-            self._AUTH_CRED = self._get_j_session_id_from_session()
-            self._cached_cookie_header = self._build_cookie_header()
-            return
-        except KeyError:
-            pass
+        cookies = self._collect_cookies(login_response)
+        self._AUTH_CRED = self._extract_j_session_id(cookies)
+        self._cached_cookie_header = self._build_cookie_header_from_list(cookies)
 
-        self._AUTH_CRED = self._get_j_session_id_from_response(login_response)
-        self._cached_cookie_header = self._build_cookie_header(login_response)
-
-    def _get_j_session_id_from_session(self) -> str:
-        for cookie in self.http_client.session.cookies:
-            if cookie.value and cookie.name.upper().startswith("JSESSIONID"):
-                return cookie.value
+    def _extract_j_session_id(self, cookies: list[tuple[str, str]]) -> str:
+        for name, value in cookies:
+            if value and name.upper().startswith("JSESSIONID"):
+                return value
 
         raise KeyError("로그인 후 JSESSIONID 쿠키를 찾을 수 없습니다")
-
-    def _get_j_session_id_from_response(self, res: requests.Response):
-        assert type(res) == requests.Response
-        # First try: requests' cookie jar
-        for cookie in res.cookies:
-            if cookie.name.upper().startswith("JSESSIONID"):
-                return cookie.value
-
-        # Second try: parse Set-Cookie header if present
-        set_cookie = res.headers.get("Set-Cookie", "")
-        if set_cookie:
-            import re
-
-            m = re.search(r"JSESSIONID[^=]*=([^;\s]+)", set_cookie, re.IGNORECASE)
-            if m:
-                return m.group(1)
-
-        # If still not found, raise a more informative error to help debugging
-        snippet = ""
-        try:
-            snippet = res.text[:500]
-        except Exception:
-            snippet = "<could not read response body>"
-
-        raise KeyError(
-            f"JSESSIONID cookie is not set in response (status={res.status_code}). "
-            f"Set-Cookie: {set_cookie!r}. Response body snippet: {snippet!r}"
-        )
 
     def _generate_req_headers(self, j_session_id: str):
         assert type(j_session_id) == str
@@ -186,39 +153,59 @@ class AuthController:
         copied_headers["Cookie"] = f"JSESSIONID={j_session_id}"
         return copied_headers
 
-    def _build_cookie_header(self, res: requests.Response = None) -> str:
+    def _build_cookie_header_from_list(self, cookies: list[tuple[str, str]]) -> str:
         """Assemble the Cookie header from known cookies.
 
         Some endpoints depend on cookies other than JSESSIONID. Build a
-        semicolon-separated header from the session jar (and optionally a
-        single response) so callers can reuse the full set.
+        semicolon-separated header from the aggregated cookie list so callers
+        can reuse the full set.
         """
 
-        cookies = []
-
-        def _append_from_jar(jar):
-            for cookie in jar:
-                if cookie.value:
-                    cookies.append(f"{cookie.name}={cookie.value}")
-
-        _append_from_jar(self.http_client.session.cookies)
-
-        if res is not None:
-            _append_from_jar(res.cookies)
-            set_cookie = res.headers.get("Set-Cookie", "")
-            if set_cookie:
-                for part in set_cookie.split(","):
-                    if "=" in part:
-                        name, value = part.split("=", 1)
-                        value = value.split(";", 1)[0].strip()
-                        name = name.strip()
-                        if value:
-                            cookies.append(f"{name}={value}")
+        cookie_pairs = [f"{name}={value}" for name, value in cookies if value]
 
         # Ensure JSESSIONID is always present if we already discovered it
         if self._AUTH_CRED and not any(
-            c.upper().startswith("JSESSIONID=") for c in cookies
+            pair.upper().startswith("JSESSIONID=") for pair in cookie_pairs
         ):
-            cookies.append(f"JSESSIONID={self._AUTH_CRED}")
+            cookie_pairs.append(f"JSESSIONID={self._AUTH_CRED}")
 
-        return "; ".join(dict.fromkeys(cookies))
+        return "; ".join(dict.fromkeys(cookie_pairs))
+
+    def _collect_cookies(self, res: requests.Response) -> list[tuple[str, str]]:
+        cookies: list[tuple[str, str]] = []
+
+        def _append_cookie(name: str, value: str):
+            if value:
+                cookies.append((name, value))
+
+        def _parse_set_cookie(header_value: str):
+            for part in header_value.split(","):
+                if "=" in part:
+                    name, value = part.split("=", 1)
+                    value = value.split(";", 1)[0].strip()
+                    name = name.strip()
+                    _append_cookie(name, value)
+
+        _parse_set_cookie(self.http_client.session.headers.get("Cookie", ""))
+        for cookie in self.http_client.session.cookies:
+            _append_cookie(cookie.name, cookie.value)
+
+        if res is not None:
+            for cookie in res.cookies:
+                _append_cookie(cookie.name, cookie.value)
+            _parse_set_cookie(res.headers.get("Set-Cookie", ""))
+            for history_res in res.history:
+                _parse_set_cookie(history_res.headers.get("Set-Cookie", ""))
+                for cookie in history_res.cookies:
+                    _append_cookie(cookie.name, cookie.value)
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique = []
+        for name, value in cookies:
+            key = (name.upper(), value)
+            if key not in seen:
+                seen.add(key)
+                unique.append((name, value))
+
+        return unique
