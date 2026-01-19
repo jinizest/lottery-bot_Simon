@@ -2,6 +2,7 @@ import json
 import datetime
 import base64
 import requests
+import re
 
 from enum import Enum
 from bs4 import BeautifulSoup as BS
@@ -56,7 +57,7 @@ class Win720:
 
         headers = self._generate_req_headers(auth_ctrl)
 
-        self.keyCode = headers['Cookie'].split("JSESSIONID=")[1]
+        self.keyCode = self._extract_jsession_id(headers.get("Cookie", ""))
         win720_round = self._get_round()
         
         makeAutoNum_ret = self._makeAutoNumbers(auth_ctrl, win720_round)
@@ -73,13 +74,31 @@ class Win720:
         assert type(auth_ctrl) == auth.AuthController
         return auth_ctrl.add_auth_cred_to_headers(self._REQ_HEADERS)
 
+    def _extract_jsession_id(self, cookie_header: str) -> str:
+        match = re.search(r"JSESSIONID=([^;]+)", cookie_header, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        for cookie in self.http_client.session.cookies:
+            if cookie.name.upper().startswith("JSESSIONID"):
+                return cookie.value
+
+        raise ValueError("JSESSIONID 쿠키를 찾을 수 없습니다.")
+
     def _get_round(self) -> str:
         res = self.http_client.get("https://www.dhlottery.co.kr/common.do?method=main")
         html = res.text
         soup = BS(
             html, "html5lib"
         )  # 'html5lib' : in case that the html don't have clean tag pairs
-        last_drawn_round = int(soup.find("strong", id="drwNo720").text)
+        round_node = soup.find("strong", id="drwNo720")
+        if round_node and round_node.text.strip().isdigit():
+            last_drawn_round = int(round_node.text.strip())
+        else:
+            match = re.search(r"drwNo720\"?\s*[:=]\s*\"?(\d{1,5})", html)
+            if not match:
+                raise ValueError("연금복권 회차 정보를 찾을 수 없습니다.")
+            last_drawn_round = int(match.group(1))
         return str(last_drawn_round + 1)
 
     def _makeAutoNumbers(self, auth_ctrl: auth.AuthController, win720_round: str) -> str:
