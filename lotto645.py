@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup as BS
 import auth
 import common
 import logging
+from HttpClient import HttpClientSingleton
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class Lotto645:
     }
 
     def __init__(self):
-        self.http_client = None
+        self.http_client = HttpClientSingleton.get_instance()
 
     def buy_lotto645(
         self,
@@ -56,7 +57,6 @@ class Lotto645:
         if mode == Lotto645Mode.MANUAL:
             assert manual_numbers is not None, "수동 모드에서는 manual_numbers가 필요합니다."
 
-        self.http_client = auth_ctrl.http_client
         headers = self._generate_req_headers(auth_ctrl)
 
         requirements = self._getRequirements(headers)
@@ -231,7 +231,6 @@ class Lotto645:
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
 
-        self.http_client = auth_ctrl.http_client
         headers = self._REQ_HEADERS.copy()
         headers["Referer"] = "https://www.dhlottery.co.kr/mypage/mylotteryledger"
         headers.pop("Content-Type", None)
