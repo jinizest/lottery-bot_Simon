@@ -29,6 +29,19 @@ class AuthController:
         "Accept-Language": "ko,en-US;q=0.9,en;q=0.8,ko-KR;q=0.7",
     }
 
+    _LOGIN_PAGE_URLS = (
+        "https://www.dhlottery.co.kr/login",
+        "https://www.dhlottery.co.kr/user.do?method=login",
+    )
+    _RSA_KEY_URLS = (
+        "https://www.dhlottery.co.kr/login/selectRsaModulus.do",
+        "https://www.dhlottery.co.kr/user.do?method=selectRsaModulus",
+    )
+    _LOGIN_ENDPOINTS = (
+        "https://www.dhlottery.co.kr/login/securityLoginCheck.do",
+        "https://www.dhlottery.co.kr/user.do?method=login",
+    )
+
     _AUTH_CRED = ""
 
     def __init__(self):
