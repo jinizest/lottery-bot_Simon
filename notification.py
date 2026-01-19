@@ -137,5 +137,8 @@ class Notification:
                 payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
                 r = requests.post(url, json=payload, timeout=10)
                 r.raise_for_status()
-            except Exception as e:
-                print(f"[notify] Telegram send failed: {e}")
+            except requests.RequestException as e:
+                response_body = ""
+                if e.response is not None:
+                    response_body = f" response={e.response.text}"
+                print(f"[notify] Telegram send failed: {e}{response_body}")
