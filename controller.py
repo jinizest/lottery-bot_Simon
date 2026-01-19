@@ -12,7 +12,7 @@ import time
 def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str):
     lotto = lotto645.Lotto645()
     _mode = lotto645.Lotto645Mode[mode.upper()]
-    response = lotto.buy_lotto645(authCtrl, cnt, _mode)
+    response = lotto.buy_lotto645(authCtrl, cnt, _mode, manual_numbers=manual_numbers)
     response['balance'] = authCtrl.get_user_balance()
     return response
 
@@ -36,7 +36,7 @@ def check_winning_win720(authCtrl: auth.AuthController) -> dict:
     return item
 
 
-def send_message(mode: int, lottery_type: int, response: dict, webhook_url: str):
+def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_id: str, userid: str):
     notify = notification.Notification()
 
     if mode == 0:
@@ -48,31 +48,84 @@ def send_message(mode: int, lottery_type: int, response: dict, webhook_url: str)
         if lottery_type == 0:
             notify.send_lotto_buying_message(response, webhook_url)
         else:
-            notify.send_win720_buying_message(response, webhook_url)
+            notify.send_win720_buying_message(userid, response, token, chat_id)
 
 
 def check():
-    load_dotenv(override=True)
+    load_dotenv()
+
+    usernames = os.environ.get('USERNAME', '').splitlines()
+    passwords = os.environ.get('PASSWORD', '').splitlines()
+    telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+
+    if not telegram_bot_token or not telegram_chat_id:
+        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        return
+
+    if len(usernames) != len(passwords):
+        print("USERNAME과 PASSWORD의 개수가 일치하지 않습니다.")
+        return
+
+    for username, password in zip(usernames, passwords):
+        print(f"Processing for user: {username}")
+
+        globalAuthCtrl = auth.AuthController()
+        try:
+            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
+                try:
+                    globalAuthCtrl.http_client.session.cookies.clear()
+                except Exception:
+                    pass
+
+            globalAuthCtrl.login(username, password)
+        except Exception as e:
+            print(f"[controller] 로그인 실패 for user {username}: {e}")
+            continue
+
+        response = check_winning_lotto645(globalAuthCtrl)
+        send_message(0, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+
+        # response = check_winning_win720(globalAuthCtrl)
+        # send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+
+def check_win():
+    load_dotenv()
+
+    usernames = os.environ.get('USERNAME', '').splitlines()
+    passwords = os.environ.get('PASSWORD', '').splitlines()
+    telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+
+    if not telegram_bot_token or not telegram_chat_id:
+        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        return
 
     username = os.environ.get('USERNAME')
     password = os.environ.get('PASSWORD')
     slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
     discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
 
-    globalAuthCtrl = auth.AuthController()
-    globalAuthCtrl.login(username, password)
+    for username, password in zip(usernames, passwords):
+        print(f"Processing for user: {username}")
 
-    response = check_winning_lotto645(globalAuthCtrl)
-    send_message(0, 0, response=response, webhook_url=discord_webhook_url)
+        globalAuthCtrl = auth.AuthController()
+        try:
+            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
+                try:
+                    globalAuthCtrl.http_client.session.cookies.clear()
+                except Exception:
+                    pass
 
-    time.sleep(10)
+            globalAuthCtrl.login(username, password)
+        except Exception as e:
+            print(f"[controller] 로그인 실패 for user {username}: {e}")
+            continue
 
-    response = check_winning_win720(globalAuthCtrl)
-    send_message(0, 1, response=response, webhook_url=discord_webhook_url)
-
-
-def buy():
-    load_dotenv(override=True)
+        response = check_winning_win720(globalAuthCtrl)
+        send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
     username = os.environ.get('USERNAME')
     password = os.environ.get('PASSWORD')
@@ -81,19 +134,93 @@ def buy():
     discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
     mode = "AUTO"
 
-    globalAuthCtrl = auth.AuthController()
-    globalAuthCtrl.login(username, password)
+def buy():
+    load_dotenv()
+
+    usernames = os.environ.get('USERNAME', '').splitlines()
+    passwords = os.environ.get('PASSWORD', '').splitlines()
+    auto_count = int(os.environ.get('AUTO_COUNT', 5))
+    manual_count = int(os.environ.get('MANUAL_COUNT', 0))
+    manual_numbers_raw = os.environ.get('MANUAL_NUMBERS_RAW', '').splitlines()
+    telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+
+    if not telegram_bot_token or not telegram_chat_id:
+        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        return
 
     response = buy_lotto645(globalAuthCtrl, count, mode)
     send_message(1, 0, response=response, webhook_url=discord_webhook_url)
 
-    time.sleep(10)
+    total_count = auto_count + manual_count
+    if total_count > 5:
+        print("AUTO_COUNT와 MANUAL_COUNT의 합은 최대 5개여야 합니다.")
+        return
 
-    globalAuthCtrl.http_client.session.cookies.clear()
-    globalAuthCtrl.login(username, password)
+    manual_numbers = []
+    for line in manual_numbers_raw:
+        try:
+            raw_numbers = [part.strip() for part in line.split(',') if part.strip()]
+            if len(raw_numbers) != 6:
+                raise ValueError("번호는 6개여야 합니다.")
 
-    response = buy_win720(globalAuthCtrl, username)
-    send_message(1, 1, response=response, webhook_url=discord_webhook_url)
+            formatted_numbers = []
+            for raw in raw_numbers:
+                num = int(raw)
+                if not 1 <= num <= 45:
+                    raise ValueError("각 번호는 1~45 사이여야 합니다.")
+                formatted_numbers.append(f"{num:02d}")
+
+            manual_numbers.append(formatted_numbers)
+        except ValueError as e:
+            print(f"수동 번호 처리 중 오류 발생: {e}")
+            return
+
+    if len(manual_numbers) != manual_count:
+        print("MANUAL_COUNT와 제공된 수동 번호의 개수가 일치하지 않습니다.")
+        return
+
+    for username, password in zip(usernames, passwords):
+        print(f"Processing for user: {username}")
+
+        globalAuthCtrl = auth.AuthController()
+        try:
+            if hasattr(globalAuthCtrl, 'http_client') and hasattr(globalAuthCtrl.http_client, 'session'):
+                try:
+                    globalAuthCtrl.http_client.session.cookies.clear()
+                except Exception:
+                    pass
+
+            try:
+                globalAuthCtrl.login(username, password)
+            except Exception as e:
+                print(f"[controller] 로그인 실패 for user {username}: {e}")
+                continue
+        except Exception:
+            try:
+                globalAuthCtrl.login(username, password)
+            except Exception as e:
+                print(f"[controller] 로그인 실패 for user {username}: {e}")
+                continue
+
+        if auto_count > 0:
+            response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
+            send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+        time.sleep(5)
+
+        if manual_count > 0:
+            response = buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers)
+            send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+        time.sleep(10)
+
+        try:
+            response = buy_win720(globalAuthCtrl, username)
+            send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+        except Exception as e:
+            print(f"[controller] 연금복권 구매 실패 for user {username}: {e}")
+            continue
 
 
 def run():
@@ -105,6 +232,8 @@ def run():
         buy()
     elif sys.argv[1] == "check":
         check()
+    elif sys.argv[1] == "check_win":
+        check_win()
 
 
 if __name__ == "__main__":

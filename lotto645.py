@@ -48,11 +48,14 @@ class Lotto645:
         self,
         auth_ctrl: auth.AuthController,
         cnt: int,
-        mode: Lotto645Mode
+        mode: Lotto645Mode,
+        manual_numbers: list = None
     ) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
         assert isinstance(cnt, int) and 1 <= cnt <= 5
         assert isinstance(mode, Lotto645Mode)
+        if mode == Lotto645Mode.MANUAL:
+            assert manual_numbers is not None, "수동 모드에서는 manual_numbers가 필요합니다."
 
         headers = self._generate_req_headers(auth_ctrl)
 
@@ -92,9 +95,34 @@ class Lotto645:
             "saleMdaDcd": "10"
         }
 
-    def _generate_body_for_manual(self, cnt: int) -> dict:
+    def _generate_body_for_manual(self, cnt: int, requirements: list, manual_numbers: list) -> dict:
         assert isinstance(cnt, int) and 1 <= cnt <= 5
-        raise NotImplementedError()
+        assert isinstance(manual_numbers, list) and len(manual_numbers) == cnt
+        for numbers in manual_numbers:
+            assert isinstance(numbers, list) and len(numbers) == 6
+            for num in numbers:
+                assert isinstance(num, str) and num.isdigit()
+                assert len(num) == 2
+
+        return {
+            "round": requirements[3],
+            "direct": requirements[0],
+            "nBuyAmount": str(1000 * cnt),
+            "param": json.dumps(
+                [
+                    {
+                        "genType": "1",
+                        "arrGameChoiceNum": ",".join(numbers),
+                        "alpabet": slot,
+                    }
+                    for numbers, slot in zip(manual_numbers, common.SLOTS[:cnt])
+                ]
+            ),
+            'ROUND_DRAW_DATE': requirements[1],
+            'WAMT_PAY_TLMT_END_DT': requirements[2],
+            "gameCnt": cnt,
+            "saleMdaDcd": "10",
+        }
 
     def _getRequirements(self, headers: dict) -> list:
         headers["Referer"] = "https://ol.dhlottery.co.kr/olotto/game/game645.do"
