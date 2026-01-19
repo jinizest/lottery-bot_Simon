@@ -135,15 +135,16 @@ class AuthController:
     def _generate_req_headers(self):
         return copy.deepcopy(self._REQ_HEADERS)
 
-    def _try_login(self, headers: dict, data: dict):
+    def _try_login(self, headers: dict, data: dict, url: str = "https://www.dhlottery.co.kr/login/securityLoginCheck.do"):
         assert isinstance(headers, dict)
         assert isinstance(data, dict)
 
-        req_headers = copy.deepcopy(headers)
-        req_headers["Referer"] = url
+        if url and isinstance(url, str):
+            headers = copy.deepcopy(headers)
+            headers["Referer"] = "https://www.dhlottery.co.kr/user.do?method=login"
         res = self.http_client.post(
             url,
-            headers=req_headers,
+            headers=headers,
             data=data,
         )
 
