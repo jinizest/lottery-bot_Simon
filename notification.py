@@ -1,5 +1,5 @@
 import re
-import os, requests
+import requests
 import html
 
 class Notification:
@@ -17,7 +17,6 @@ class Notification:
 
             lotto_number_str = self.make_lotto_number_message(result.get("arrGameChoiceNum", []))
             buy_round = result.get("buyRound", "알 수 없음")
-            # Use HTML <pre> for code-style block (Telegram parse_mode=HTML)
             lotto_block = f"<pre>{html.escape(lotto_number_str)}</pre>"
             message = f"{html.escape(userid + '님, ' + str(buy_round) + '회 로또 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{lotto_block}"
             self._send_telegram(token, chat_id, message)
@@ -28,15 +27,10 @@ class Notification:
     def make_lotto_number_message(self, lotto_number: list) -> str:
         assert type(lotto_number) == list
 
-        # parse list without last number 3
         lotto_number = [x[:-1] for x in lotto_number]
-        
-        # remove alphabet and | replace white space  from lotto_number
         lotto_number = [x.replace("|", " ") for x in lotto_number]
-        
-        # lotto_number to string 
         lotto_number = '\n'.join(x for x in lotto_number)
-        
+
         return lotto_number
 
     def send_win720_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
@@ -53,7 +47,6 @@ class Notification:
 
             win720_round = result_msg.split("|")[3]
             win720_number_str = self.make_win720_number_message(body.get("saleTicket", ""))
-            # Use HTML <pre> for code-style block (Telegram parse_mode=HTML)
             win720_block = f"<pre>{html.escape(win720_number_str)}</pre>"
             message = f"{html.escape(userid + '님, ' + str(win720_round) + '회 연금복권 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{win720_block}"
             self._send_telegram(token, chat_id, message)
@@ -68,7 +61,7 @@ class Notification:
             formatted_numbers.append(formatted_number)
         return "\n".join(formatted_numbers)
 
-    def send_lotto_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None: 
+    def send_lotto_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
         assert type(winning) == dict
         assert type(token) == str
         assert type(chat_id) == str
@@ -102,7 +95,6 @@ class Notification:
                     else:
                         formatted_nums.append(formatted_num)
 
-                # 더 좁은 폭으로 정렬해 한 줄 내에 표시되도록 한다
                 COL_WIDTH = 3
                 formatted_nums = [f"{num:>{COL_WIDTH}}" for num in formatted_nums]
 
@@ -116,99 +108,31 @@ class Notification:
             else:
                 winning_message = f"{userid}님, 로또 *{round_val}회* - 다음 기회에... 🫠"
 
-            # Send formatted results inside an HTML <pre> block and escape content
             results_block = f"<pre>{html.escape(formatted_results)}</pre>"
-            # escape winning_message too to avoid accidental HTML injection
             self._send_telegram(token, chat_id, f"{results_block}\n{html.escape(winning_message)}")
         except KeyError:
             return
 
-    def send_win720_winning_message(self, *args, **kwargs) -> None:
-        """
-        Handle win720 winning messages for different call signatures.
+    def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
+        assert type(winning) == dict
+        assert type(token) == str
+        assert type(chat_id) == str
 
-        Supported usages:
-        - Telegram flow (used by controller.py in this repo):
-            send_win720_winning_message(userid: str, winning: dict, token: str, chat_id: str)
-
-        - Webhook flow (some CI/workflows expect this):
-            send_win720_winning_message(winning: dict, webhook_url: str)
-
-        This function uses safe dict access to avoid KeyError and logs
-        errors instead of raising, so notification paths don't break the
-        main flow.
-        """
         try:
-            # Telegram style: userid, winning, token, chat_id
-            if len(args) == 4:
-                userid, winning, token, chat_id = args
-                if not isinstance(winning, dict):
-                    print("[notify] send_win720_winning_message: winning must be a dict")
-                    return
+            round_val = winning.get("round", "알 수 없음")
+            money = winning.get("money", "-")
 
-                round_val = winning.get("round", "알 수 없음")
-                money = winning.get("money", "-")
+            if money != "-":
+                message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
+            else:
+                message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
 
-                if money != "-":
-                    message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
-                else:
-                    message = f"{userid}님, 연금복권 - 다음 기회에... 🫠"
-
-                self._send_telegram(token, chat_id, message)
-                return
-
-            # Webhook style: winning, webhook_url
-            if len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
-                winning, webhook_url = args
-                round_val = winning.get("round", "알 수 없음")
-                money = winning.get("money", "-")
-
-                if money != "-":
-                    message = f"연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
-                else:
-                    message = f"연금복권 - 다음 기회에... 🫠"
-
-                # send to discord webhook helper (no-op if webhook_url empty)
-                if hasattr(self, '_send_discord_webhook'):
-                    self._send_discord_webhook(webhook_url, message)
-                else:
-                    print("[notify] Discord webhook helper not available")
-                return
-
-            # Try kwargs fallback (explicit names)
-            winning = kwargs.get('winning')
-            webhook_url = kwargs.get('webhook_url')
-            token = kwargs.get('token')
-            chat_id = kwargs.get('chat_id')
-            userid = kwargs.get('userid')
-
-            if webhook_url and isinstance(winning, dict):
-                round_val = winning.get("round", "알 수 없음")
-                money = winning.get("money", "-")
-                message = f"연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉" if money != "-" else "연금복권 - 다음 기회에... 🫠"
-                if hasattr(self, '_send_discord_webhook'):
-                    self._send_discord_webhook(webhook_url, message)
-                else:
-                    print("[notify] Discord webhook helper not available")
-                return
-
-            if token and chat_id and userid and isinstance(winning, dict):
-                round_val = winning.get("round", "알 수 없음")
-                money = winning.get("money", "-")
-                message = f"{userid}님, 연금복권 *{round_val}회* - *{money}* 당첨 되었습니다 🎉" if money != "-" else f"{userid}님, 연금복권 - 다음 기회에... 🫠"
-                self._send_telegram(token, chat_id, message)
-                return
-
-            print("[notify] send_win720_winning_message: unsupported call signature or missing data")
+            self._send_telegram(token, chat_id, message)
         except Exception as e:
             print(f"[notify] send_win720_winning_message failed: {e}")
             return
 
     def _send_telegram(self, token: str, chat_id: str, message: str) -> None:
-        """
-        Telegram 메시지 전송:
-        - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID가 있으면 Telegram으로 보냄
-        """
         if token and chat_id:
             try:
                 url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -217,21 +141,3 @@ class Notification:
                 r.raise_for_status()
             except Exception as e:
                 print(f"[notify] Telegram send failed: {e}")
-
-    def _send_discord_webhook(self, webhook_url: str, content: str) -> None:
-        """
-        Send a simple message to a Discord webhook URL using 'content' field.
-        """
-        if not webhook_url:
-            print("[notify] _send_discord_webhook: webhook_url is empty")
-            return
-
-        try:
-            payload = {"content": content}
-            r = requests.post(webhook_url, json=payload, timeout=10)
-            r.raise_for_status()
-        except Exception as e:
-            print(f"[notify] Discord webhook send failed: {e}")
-
-
-
