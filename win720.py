@@ -2,6 +2,7 @@ import json
 import datetime
 import base64
 import requests
+import re
 
 from enum import Enum
 from bs4 import BeautifulSoup as BS
@@ -95,6 +96,17 @@ class Win720:
     def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
         return auth_ctrl.add_auth_cred_to_headers(self._REQ_HEADERS)
+
+    def _extract_jsession_id(self, cookie_header: str) -> str:
+        match = re.search(r"JSESSIONID=([^;]+)", cookie_header, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        for cookie in self.http_client.session.cookies:
+            if cookie.name.upper().startswith("JSESSIONID"):
+                return cookie.value
+
+        raise ValueError("JSESSIONID 쿠키를 찾을 수 없습니다.")
 
     def _get_round(self) -> str:
         try:

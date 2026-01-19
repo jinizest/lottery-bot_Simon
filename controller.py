@@ -9,7 +9,7 @@ import notification
 import time
 
 
-def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers: list = None):
+def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str):
     lotto = lotto645.Lotto645()
     _mode = lotto645.Lotto645Mode[mode.upper()]
     response = lotto.buy_lotto645(authCtrl, cnt, _mode, manual_numbers=manual_numbers)
@@ -41,12 +41,12 @@ def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_
 
     if mode == 0:
         if lottery_type == 0:
-            notify.send_lotto_winning_message(userid, response, token, chat_id)
+            notify.send_lotto_winning_message(response, webhook_url)
         else:
-            notify.send_win720_winning_message(userid, response, token, chat_id)
+            notify.send_win720_winning_message(response, webhook_url)
     elif mode == 1:
         if lottery_type == 0:
-            notify.send_lotto_buying_message(userid, response, token, chat_id)
+            notify.send_lotto_buying_message(response, webhook_url)
         else:
             notify.send_win720_buying_message(userid, response, token, chat_id)
 
@@ -86,7 +86,6 @@ def check():
         response = check_winning_lotto645(globalAuthCtrl)
         send_message(0, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        # time.sleep(10)
 
         # response = check_winning_win720(globalAuthCtrl)
         # send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
@@ -104,9 +103,10 @@ def check_win():
         print("Telegram 환경 변수가 설정되지 않았습니다.")
         return
 
-    if len(usernames) != len(passwords):
-        print("USERNAME과 PASSWORD의 개수가 일치하지 않습니다.")
-        return
+    username = os.environ.get('USERNAME')
+    password = os.environ.get('PASSWORD')
+    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
+    discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
 
     for username, password in zip(usernames, passwords):
         print(f"Processing for user: {username}")
@@ -127,6 +127,12 @@ def check_win():
         response = check_winning_win720(globalAuthCtrl)
         send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
+    username = os.environ.get('USERNAME')
+    password = os.environ.get('PASSWORD')
+    count = int(os.environ.get('COUNT'))
+    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
+    discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+    mode = "AUTO"
 
 def buy():
     load_dotenv()
@@ -143,9 +149,8 @@ def buy():
         print("Telegram 환경 변수가 설정되지 않았습니다.")
         return
 
-    if len(usernames) != len(passwords):
-        print("USERNAME과 PASSWORD의 개수가 일치하지 않습니다.")
-        return
+    response = buy_lotto645(globalAuthCtrl, count, mode)
+    send_message(1, 0, response=response, webhook_url=discord_webhook_url)
 
     total_count = auto_count + manual_count
     if total_count > 5:

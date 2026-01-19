@@ -64,7 +64,7 @@ class Lotto645:
         data = (
             self._generate_body_for_auto_mode(cnt, requirements)
             if mode == Lotto645Mode.AUTO
-            else self._generate_body_for_manual(cnt, requirements, manual_numbers)
+            else self._generate_body_for_manual(cnt)
         )
 
         body = self._try_buying(headers, data)
