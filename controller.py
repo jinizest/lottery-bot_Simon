@@ -200,6 +200,9 @@ def buy():
 
         time.sleep(10)
 
+        globalAuthCtrl.http_client.session.cookies.clear()
+        globalAuthCtrl.login(username, password)
+
         try:
             response = buy_win720(globalAuthCtrl, username)
             send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
