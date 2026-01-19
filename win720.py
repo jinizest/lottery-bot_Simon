@@ -12,7 +12,6 @@ from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256
 from Crypto.Random import get_random_bytes
 
-from HttpClient import HttpClientSingleton
 
 import auth
 import common
@@ -51,7 +50,7 @@ class Win720:
     }
 
     def __init__(self):
-        self.http_client = HttpClientSingleton.get_instance()
+        self.http_client = None
 
     def buy_Win720(
         self,
@@ -60,6 +59,7 @@ class Win720:
     ) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
 
+        self.http_client = auth_ctrl.http_client
         jsessionid = auth_ctrl.get_current_session_id()
 
         self.keyCode = jsessionid
@@ -224,6 +224,7 @@ class Win720:
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
 
+        self.http_client = auth_ctrl.http_client
         headers = self._generate_req_headers(auth_ctrl)
 
         parameters = common.get_search_date_range()

@@ -6,7 +6,7 @@ import base64
 import binascii
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
-from HttpClient import HttpClientSingleton
+from HttpClient import HttpClient
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -42,10 +42,9 @@ class AuthController:
         "https://www.dhlottery.co.kr/user.do?method=login",
     )
 
-    _AUTH_CRED = ""
-
     def __init__(self):
-        self.http_client = HttpClientSingleton.get_instance()
+        self.http_client = HttpClient()
+        self._auth_cred = ""
 
     def login(self, user_id: str, password: str):
         assert isinstance(user_id, str)
@@ -161,7 +160,7 @@ class AuthController:
 
     def _update_auth_cred(self, j_session_id: str) -> None:
         assert isinstance(j_session_id, str)
-        self._AUTH_CRED = j_session_id
+        self._auth_cred = j_session_id
 
         self.http_client.session.cookies.set("JSESSIONID", j_session_id, domain=".dhlottery.co.kr")
 
@@ -179,8 +178,8 @@ class AuthController:
             if cookie.name in ["JSESSIONID", "DHJSESSIONID", "WMONID"]:
                 return cookie.value
 
-        if self._AUTH_CRED:
-            return self._AUTH_CRED
+        if self._auth_cred:
+            return self._auth_cred
 
         return ""
 
