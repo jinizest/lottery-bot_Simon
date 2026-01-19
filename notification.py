@@ -1,7 +1,6 @@
-import requests
+import html
 import re
 import requests
-import html
 
 class Notification:
     def send_lotto_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
@@ -64,19 +63,24 @@ class Notification:
 
     def send_lotto_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
         assert type(winning) == dict
-        assert type(webhook_url) == str
+        assert type(token) == str
+        assert type(chat_id) == str
 
         try:
-            round = winning["round"]
-            money = winning["money"]
+            round_val = winning.get("round", "알 수 없음")
+            money = winning.get("money", "-")
 
-            if winning["lotto_details"]:
-                max_label_status_length = max(len(f"{line['label']} {line['status']}") for line in winning["lotto_details"])
+            formatted_results = "상세 정보를 불러오지 못했습니다."
+            lotto_details = winning.get("lotto_details", [])
+            if lotto_details:
+                max_label_status_length = max(
+                    len(f"{line['label']} {line['status']}") for line in lotto_details
+                )
 
                 formatted_lines = []
-                for line in winning["lotto_details"]:
+                for line in lotto_details:
                     line_label_status = f"{line['label']} {line['status']}".ljust(max_label_status_length)
-                    line_result = line["result"]
+                    line_result = line.get("result", [])
 
                     formatted_nums = []
                     for num in line_result:
@@ -88,28 +92,23 @@ class Notification:
                             formatted_nums.append(f" {formatted_num} ")
 
                     formatted_nums = [f"{num:>6}" for num in formatted_nums]
-
                     formatted_line = f"{line_label_status} " + " ".join(formatted_nums)
                     formatted_lines.append(formatted_line)
 
-                COL_WIDTH = 3
-                formatted_nums = [f"{num:>{COL_WIDTH}}" for num in formatted_nums]
+                formatted_results = "\n".join(formatted_lines)
 
-                formatted_line = f"{line_label_status} " + " ".join(formatted_nums)
-                formatted_lines.append(formatted_line)
-
-            is_winning = winning['money'] != "-" and winning['money'] != "0 원" and winning['money'] != "0"
+            is_winning = money not in {"-", "0 원", "0"}
 
             if is_winning:
-                winning_message = f"로또 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 🎉"
+                winning_message = f"로또 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
             else:
-                winning_message = f"로또 *{winning['round']}회* - 다음 기회에... 🫠"
+                winning_message = f"로또 *{round_val}회* - 다음 기회에... 🫠"
 
             results_block = f"<pre>{html.escape(formatted_results)}</pre>"
             self._send_telegram(token, chat_id, f"{results_block}\n{html.escape(winning_message)}")
         except KeyError:
             message = "로또 - 다음 기회에... 🫠"
-            self._send_discord_webhook(webhook_url, message)
+            self._send_telegram(token, chat_id, message)
             return
 
     def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:

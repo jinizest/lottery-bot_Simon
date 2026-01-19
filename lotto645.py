@@ -61,11 +61,12 @@ class Lotto645:
 
         requirements = self._getRequirements(headers)
 
-        data = (
-            self._generate_body_for_auto_mode(cnt, requirements)
-            if mode == Lotto645Mode.AUTO
-            else self._generate_body_for_manual(cnt)
-        )
+        if mode == Lotto645Mode.AUTO:
+            data = self._generate_body_for_auto_mode(cnt, requirements)
+        elif mode == Lotto645Mode.MANUAL:
+            data = self._generate_body_for_manual(cnt, requirements, manual_numbers)
+        else:
+            raise ValueError(f"지원하지 않는 모드입니다: {mode}")
 
         body = self._try_buying(headers, data)
 
