@@ -1,22 +1,27 @@
 import copy
-import json
+import datetime
 import requests
-import rsa
+import json
+import base64
+import binascii
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_v1_5
 from HttpClient import HttpClientSingleton
 
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 class AuthController:
     _REQ_HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36",
+        "User-Agent": USER_AGENT,
         "Connection": "keep-alive",
         "Cache-Control": "max-age=0",
-        "sec-ch-ua": '" Not;A Brand";v="99", "Google Chrome";v="91", "Chromium";v="91"',
+        "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
         "sec-ch-ua-mobile": "?0",
         "Upgrade-Insecure-Requests": "1",
-        "Origin": "https://www.dhlottery.co.kr",
+        "Origin": "https://dhlottery.co.kr",
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-        "Referer": "https://www.dhlottery.co.kr/",
+        "Referer": "https://dhlottery.co.kr/",
         "Sec-Fetch-Site": "same-site",
         "Sec-Fetch-Mode": "navigate",
         "Sec-Fetch-User": "?1",
@@ -28,83 +33,98 @@ class AuthController:
 
     def __init__(self):
         self.http_client = HttpClientSingleton.get_instance()
-        # Cache the complete Cookie header issued during login so we can reuse
-        # auxiliary cookies (e.g., WMONID) that some endpoints expect.
-        self._cached_cookie_header = ""
 
     def login(self, user_id: str, password: str):
-        assert type(user_id) == str
-        assert type(password) == str
+        assert isinstance(user_id, str)
+        assert isinstance(password, str)
 
-        self._prepare_session()
-        modulus, exponent = self._fetch_rsa_key()
+        self.http_client.get("https://dhlottery.co.kr/", headers=self._REQ_HEADERS)
+        self.http_client.get("https://dhlottery.co.kr/user.do?method=login", headers=self._REQ_HEADERS)
+        self.http_client.get("https://www.dhlottery.co.kr/", headers=self._REQ_HEADERS)
+        self.http_client.get("https://www.dhlottery.co.kr/user.do?method=login", headers=self._REQ_HEADERS)
 
-        encrypted_user_id = self._encrypt_credential(user_id, modulus, exponent)
-        encrypted_password = self._encrypt_credential(password, modulus, exponent)
+        modulus, exponent = self._get_rsa_key()
 
-        headers = self._generate_login_headers()
+        enc_user_id = self._rsa_encrypt(user_id, modulus, exponent)
+        enc_password = self._rsa_encrypt(password, modulus, exponent)
+
+        headers = copy.deepcopy(self._REQ_HEADERS)
+        headers.update({
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://www.dhlottery.co.kr",
+            "Referer": "https://www.dhlottery.co.kr/user.do?method=login"
+        })
+
         data = {
-            "userId": encrypted_user_id,
-            "userPswdEncn": encrypted_password,
+            "userId": enc_user_id,
+            "userPswdEncn": enc_password,
+            "inpUserId": user_id
         }
 
-        res = self._try_login(headers, data)
-        self._update_auth_cred(res)
+        self._try_login(headers, data)
 
     def add_auth_cred_to_headers(self, headers: dict) -> str:
-        assert type(headers) == dict
+        assert isinstance(headers, dict)
 
         copied_headers = copy.deepcopy(headers)
-        cookie_header = self._cached_cookie_header or f"JSESSIONID={self._AUTH_CRED}"
-        copied_headers["Cookie"] = cookie_header
         return copied_headers
 
-    def _prepare_session(self):
-        self.http_client.get(
-            "https://www.dhlottery.co.kr/login",
-            headers=self._generate_login_headers(include_content_type=False),
+    def _get_default_auth_cred(self):
+        res = self.http_client.get(
+            "https://www.dhlottery.co.kr/common.do?method=main"
         )
+        return self._get_j_session_id_from_response(res)
 
-    def _fetch_rsa_key(self):
+    def _get_rsa_key(self):
+        headers = copy.deepcopy(self._REQ_HEADERS)
+        headers.update({
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.dhlottery.co.kr/user.do?method=login"
+        })
+        headers.pop("Upgrade-Insecure-Requests", None)
+
         res = self.http_client.get(
             "https://www.dhlottery.co.kr/login/selectRsaModulus.do",
-            headers=self._generate_login_headers(include_content_type=False),
+            headers=headers
         )
 
-        payload = json.loads(res.text)
-        data = payload.get("data", {})
-        modulus = data.get("rsaModulus")
-        exponent = data.get("publicExponent")
+        try:
+            data = res.json()
+        except ValueError:
+            raise ValueError(f"Failed to parse JSON. St: {res.status_code}")
 
-        if not modulus or not exponent:
-            raise KeyError(
-                f"RSA modulus or exponent missing in response: {payload!r}"
-            )
+        if "data" in data and "rsaModulus" in data["data"]:
+            modulus = data["data"]["rsaModulus"]
+            exponent = data["data"]["publicExponent"]
+            return modulus, exponent
 
-        return modulus, exponent
+        if "rsaModulus" in data:
+            return data["rsaModulus"], data["publicExponent"]
 
-    def _encrypt_credential(self, credential: str, modulus_hex: str, exponent_hex: str) -> str:
-        assert type(credential) == str
-        pub_key = rsa.PublicKey(int(modulus_hex, 16), int(exponent_hex, 16))
-        encrypted_bytes = rsa.encrypt(credential.encode("utf-8"), pub_key)
-        return encrypted_bytes.hex()
+        raise KeyError("rsaModulus not found")
 
-    def _generate_login_headers(self, include_content_type: bool = True):
-        copied_headers = copy.deepcopy(self._REQ_HEADERS)
-        copied_headers.update(
-            {
-                "Referer": "https://www.dhlottery.co.kr/login",
-                "Origin": "https://www.dhlottery.co.kr",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            }
-        )
-        if not include_content_type:
-            copied_headers.pop("Content-Type", None)
-        return copied_headers
+    def _rsa_encrypt(self, text, modulus, exponent):
+        key_spec = RSA.construct((int(modulus, 16), int(exponent, 16)))
+        cipher = PKCS1_v1_5.new(key_spec)
+        ciphertext = cipher.encrypt(text.encode('utf-8'))
+        return binascii.hexlify(ciphertext).decode('utf-8')
 
-    def _try_login(self, headers: dict, data: dict) -> requests.Response:
-        assert type(headers) == dict
-        assert type(data) == dict
+    def _get_j_session_id_from_response(self, res: requests.Response):
+        assert isinstance(res, requests.Response)
+
+        for cookie in res.cookies:
+            if cookie.name == "JSESSIONID":
+                return cookie.value
+
+        return self.get_current_session_id()
+
+    def _generate_req_headers(self):
+        return copy.deepcopy(self._REQ_HEADERS)
+
+    def _try_login(self, headers: dict, data: dict):
+        assert isinstance(headers, dict)
+        assert isinstance(data, dict)
 
         res = self.http_client.post(
             "https://www.dhlottery.co.kr/login/securityLoginCheck.do",
@@ -112,100 +132,84 @@ class AuthController:
             data=data,
         )
 
-        body = res.text
-        if any(
-            msg in body
-            for msg in [
-                "아이디 또는 비밀번호를 확인해주세요",
-                "로그인에 실패",
-                "loginFail",
-            ]
-        ):
-            raise PermissionError("로그인 실패: 아이디 또는 비밀번호가 올바르지 않습니다")
+        new_jsessionid = self._get_j_session_id_from_response(res)
+        if new_jsessionid:
+            self._update_auth_cred(new_jsessionid)
+
+        try:
+            self.http_client.get("https://dhlottery.co.kr/main", headers=self._REQ_HEADERS)
+        except Exception as e:
+            print(f"[Warning] Failed to check main page after login: {e}")
 
         return res
 
-    def _update_auth_cred(self, login_response: requests.Response) -> None:
-        """Refresh the cached session cookies after login.
+    def _update_auth_cred(self, j_session_id: str) -> None:
+        assert isinstance(j_session_id, str)
+        self._AUTH_CRED = j_session_id
 
-        Some environments report merge conflicts when the session cookie is set
-        on a redirect response or under a different cookie name. To avoid
-        brittle parsing, collect cookies from the session jar, the login
-        response, and any intermediate responses, then build a unified cookie
-        header and extract the JSESSIONID-equivalent value from that set.
-        """
+        self.http_client.session.cookies.set("JSESSIONID", j_session_id, domain=".dhlottery.co.kr")
 
-        cookies = self._collect_cookies(login_response)
-        self._AUTH_CRED = self._extract_j_session_id(cookies)
-        self._cached_cookie_header = self._build_cookie_header_from_list(cookies)
-
-    def _extract_j_session_id(self, cookies: list[tuple[str, str]]) -> str:
-        for name, value in cookies:
-            if value and name.upper().startswith("JSESSIONID"):
-                return value
-
-        raise KeyError("로그인 후 JSESSIONID 쿠키를 찾을 수 없습니다")
-
-    def _generate_req_headers(self, j_session_id: str):
-        assert type(j_session_id) == str
-
-        copied_headers = copy.deepcopy(self._REQ_HEADERS)
-        copied_headers["Cookie"] = f"JSESSIONID={j_session_id}"
-        return copied_headers
-
-    def _build_cookie_header_from_list(self, cookies: list[tuple[str, str]]) -> str:
-        """Assemble the Cookie header from known cookies.
-
-        Some endpoints depend on cookies other than JSESSIONID. Build a
-        semicolon-separated header from the aggregated cookie list so callers
-        can reuse the full set.
-        """
-
-        cookie_pairs = [f"{name}={value}" for name, value in cookies if value]
-
-        # Ensure JSESSIONID is always present if we already discovered it
-        if self._AUTH_CRED and not any(
-            pair.upper().startswith("JSESSIONID=") for pair in cookie_pairs
-        ):
-            cookie_pairs.append(f"JSESSIONID={self._AUTH_CRED}")
-
-        return "; ".join(dict.fromkeys(cookie_pairs))
-
-    def _collect_cookies(self, res: requests.Response) -> list[tuple[str, str]]:
-        cookies: list[tuple[str, str]] = []
-
-        def _append_cookie(name: str, value: str):
-            if value:
-                cookies.append((name, value))
-
-        def _parse_set_cookie(header_value: str):
-            for part in header_value.split(","):
-                if "=" in part:
-                    name, value = part.split("=", 1)
-                    value = value.split(";", 1)[0].strip()
-                    name = name.strip()
-                    _append_cookie(name, value)
-
-        _parse_set_cookie(self.http_client.session.headers.get("Cookie", ""))
+        wmonid = None
         for cookie in self.http_client.session.cookies:
-            _append_cookie(cookie.name, cookie.value)
+            if cookie.name == "WMONID":
+                wmonid = cookie.value
+                break
 
-        if res is not None:
-            for cookie in res.cookies:
-                _append_cookie(cookie.name, cookie.value)
-            _parse_set_cookie(res.headers.get("Set-Cookie", ""))
-            for history_res in res.history:
-                _parse_set_cookie(history_res.headers.get("Set-Cookie", ""))
-                for cookie in history_res.cookies:
-                    _append_cookie(cookie.name, cookie.value)
+        if wmonid:
+            self.http_client.session.cookies.set("WMONID", wmonid, domain=".dhlottery.co.kr")
 
-        # Deduplicate while preserving order
-        seen = set()
-        unique = []
-        for name, value in cookies:
-            key = (name.upper(), value)
-            if key not in seen:
-                seen.add(key)
-                unique.append((name, value))
+    def get_current_session_id(self) -> str:
+        for cookie in self.http_client.session.cookies:
+            if cookie.name in ["JSESSIONID", "DHJSESSIONID", "WMONID"]:
+                return cookie.value
 
-        return unique
+        if self._AUTH_CRED:
+            return self._AUTH_CRED
+
+        return ""
+
+    def get_user_balance(self) -> str:
+        try:
+            try:
+                self.http_client.get("https://dhlottery.co.kr/mypage/home")
+            except requests.RequestException:
+                pass
+
+            timestamp = int(datetime.datetime.now().timestamp() * 1000)
+            url = f"https://dhlottery.co.kr/mypage/selectUserMndp.do?_={timestamp}"
+
+            headers = copy.deepcopy(self._REQ_HEADERS)
+            headers.update({
+                "Referer": "https://dhlottery.co.kr/mypage/home",
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/json;charset=UTF-8",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "requestMenuUri": "/mypage/home",
+                "AJAX": "true",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "Sec-Fetch-Dest": "empty"
+            })
+
+            res = self.http_client.get(url, headers=headers)
+
+            txt = res.text.strip()
+            if txt.startswith("<"):
+                return "확인 불가 (로그인/설정)"
+
+            data = json.loads(txt)
+
+            if 'data' in data and isinstance(data['data'], dict):
+                data = data['data']
+
+            if 'userMndp' in data:
+                data = data['userMndp']
+
+            if 'totalAmt' in data:
+                val = str(data['totalAmt']).replace(',', '')
+                return f"{int(val):,}원"
+
+            return "0원"
+
+        except Exception as e:
+            return f"0 (System Error: {str(e)})"
