@@ -24,6 +24,19 @@ class AuthController:
         "Accept-Language": "ko,en-US;q=0.9,en;q=0.8,ko-KR;q=0.7",
     }
 
+    _LOGIN_PAGE_URLS = (
+        "https://www.dhlottery.co.kr/login",
+        "https://www.dhlottery.co.kr/user.do?method=login",
+    )
+    _RSA_KEY_URLS = (
+        "https://www.dhlottery.co.kr/login/selectRsaModulus.do",
+        "https://www.dhlottery.co.kr/user.do?method=selectRsaModulus",
+    )
+    _LOGIN_ENDPOINTS = (
+        "https://www.dhlottery.co.kr/login/securityLoginCheck.do",
+        "https://www.dhlottery.co.kr/user.do?method=login",
+    )
+
     _AUTH_CRED = ""
 
     def __init__(self):
@@ -48,8 +61,17 @@ class AuthController:
             "userPswdEncn": encrypted_password,
         }
 
-        res = self._try_login(headers, data)
-        self._update_auth_cred(res)
+        last_error = None
+        for login_url in self._LOGIN_ENDPOINTS:
+            try:
+                res = self._try_login(headers, data, login_url)
+                self._update_auth_cred(res)
+                return
+            except Exception as exc:
+                last_error = exc
+
+        if last_error:
+            raise last_error
 
     def add_auth_cred_to_headers(self, headers: dict) -> str:
         assert type(headers) == dict
@@ -60,28 +82,43 @@ class AuthController:
         return copied_headers
 
     def _prepare_session(self):
-        self.http_client.get(
-            "https://www.dhlottery.co.kr/login",
-            headers=self._generate_login_headers(include_content_type=False),
-        )
+        for url in self._LOGIN_PAGE_URLS:
+            try:
+                self.http_client.get(
+                    url,
+                    headers=self._generate_login_headers(
+                        include_content_type=False,
+                        referer=url,
+                    ),
+                )
+                return
+            except Exception:
+                continue
 
     def _fetch_rsa_key(self):
-        res = self.http_client.get(
-            "https://www.dhlottery.co.kr/login/selectRsaModulus.do",
-            headers=self._generate_login_headers(include_content_type=False),
+        last_payload = None
+        for url in self._RSA_KEY_URLS:
+            try:
+                res = self.http_client.get(
+                    url,
+                    headers=self._generate_login_headers(
+                        include_content_type=False,
+                        referer=url,
+                    ),
+                )
+                payload = json.loads(res.text)
+                last_payload = payload
+                data = payload.get("data", {})
+                modulus = data.get("rsaModulus")
+                exponent = data.get("publicExponent")
+                if modulus and exponent:
+                    return modulus, exponent
+            except Exception:
+                continue
+
+        raise KeyError(
+            f"RSA modulus or exponent missing in response: {last_payload!r}"
         )
-
-        payload = json.loads(res.text)
-        data = payload.get("data", {})
-        modulus = data.get("rsaModulus")
-        exponent = data.get("publicExponent")
-
-        if not modulus or not exponent:
-            raise KeyError(
-                f"RSA modulus or exponent missing in response: {payload!r}"
-            )
-
-        return modulus, exponent
 
     def _encrypt_credential(self, credential: str, modulus_hex: str, exponent_hex: str) -> str:
         assert type(credential) == str
@@ -89,11 +126,11 @@ class AuthController:
         encrypted_bytes = rsa.encrypt(credential.encode("utf-8"), pub_key)
         return encrypted_bytes.hex()
 
-    def _generate_login_headers(self, include_content_type: bool = True):
+    def _generate_login_headers(self, include_content_type: bool = True, referer: str | None = None):
         copied_headers = copy.deepcopy(self._REQ_HEADERS)
         copied_headers.update(
             {
-                "Referer": "https://www.dhlottery.co.kr/login",
+                "Referer": referer or "https://www.dhlottery.co.kr/login",
                 "Origin": "https://www.dhlottery.co.kr",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             }
@@ -102,13 +139,15 @@ class AuthController:
             copied_headers.pop("Content-Type", None)
         return copied_headers
 
-    def _try_login(self, headers: dict, data: dict) -> requests.Response:
+    def _try_login(self, headers: dict, data: dict, url: str) -> requests.Response:
         assert type(headers) == dict
         assert type(data) == dict
 
+        req_headers = copy.deepcopy(headers)
+        req_headers["Referer"] = url
         res = self.http_client.post(
-            "https://www.dhlottery.co.kr/login/securityLoginCheck.do",
-            headers=headers,
+            url,
+            headers=req_headers,
             data=data,
         )
 
