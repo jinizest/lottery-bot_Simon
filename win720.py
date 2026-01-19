@@ -2,6 +2,7 @@ import json
 import datetime
 import base64
 import requests
+import re
 
 from enum import Enum
 from bs4 import BeautifulSoup as BS
@@ -79,7 +80,14 @@ class Win720:
         soup = BS(
             html, "html5lib"
         )  # 'html5lib' : in case that the html don't have clean tag pairs
-        last_drawn_round = int(soup.find("strong", id="drwNo720").text)
+        round_node = soup.find("strong", id="drwNo720")
+        if round_node and round_node.text.strip().isdigit():
+            last_drawn_round = int(round_node.text.strip())
+        else:
+            match = re.search(r"drwNo720\"?\s*[:=]\s*\"?(\d{1,5})", html)
+            if not match:
+                raise ValueError("연금복권 회차 정보를 찾을 수 없습니다.")
+            last_drawn_round = int(match.group(1))
         return str(last_drawn_round + 1)
 
     def _makeAutoNumbers(self, auth_ctrl: auth.AuthController, win720_round: str) -> str:

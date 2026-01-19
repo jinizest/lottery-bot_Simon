@@ -1,5 +1,6 @@
 import datetime
 import json
+import re
 
 from datetime import timedelta
 from enum import Enum
@@ -157,8 +158,20 @@ class Lotto645:
         soup = BS(
             html, "html5lib"
         )
-        draw_date = soup.find("input", id="ROUND_DRAW_DATE").get('value')
-        tlmt_date = soup.find("input", id="WAMT_PAY_TLMT_END_DT").get('value')
+        draw_input = soup.find("input", id="ROUND_DRAW_DATE")
+        tlmt_input = soup.find("input", id="WAMT_PAY_TLMT_END_DT")
+
+        draw_date = draw_input.get("value") if draw_input else None
+        tlmt_date = tlmt_input.get("value") if tlmt_input else None
+
+        if not draw_date or not tlmt_date:
+            draw_match = re.search(r"ROUND_DRAW_DATE\"?\s*[:=]\s*\"?(\d{8})", html)
+            tlmt_match = re.search(r"WAMT_PAY_TLMT_END_DT\"?\s*[:=]\s*\"?(\d{8})", html)
+            draw_date = draw_date or (draw_match.group(1) if draw_match else None)
+            tlmt_date = tlmt_date or (tlmt_match.group(1) if tlmt_match else None)
+
+        if not draw_date or not tlmt_date:
+            raise ValueError("로또 구매 파라미터 날짜 정보를 찾을 수 없습니다.")
 
         return [direct, draw_date, tlmt_date]
 
@@ -168,7 +181,14 @@ class Lotto645:
         soup = BS(
             html, "html5lib"
         )  # 'html5lib' : in case that the html don't have clean tag pairs
-        last_drawn_round = int(soup.find("strong", id="lottoDrwNo").text)
+        round_node = soup.find("strong", id="lottoDrwNo")
+        if round_node and round_node.text.strip().isdigit():
+            last_drawn_round = int(round_node.text.strip())
+        else:
+            match = re.search(r"lottoDrwNo\"?\s*[:=]\s*\"?(\d{1,5})", html)
+            if not match:
+                raise ValueError("로또 회차 정보를 찾을 수 없습니다.")
+            last_drawn_round = int(match.group(1))
         return str(last_drawn_round + 1)
 
     def get_balance(self, auth_ctrl: auth.AuthController) -> str: 
