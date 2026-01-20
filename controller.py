@@ -7,6 +7,7 @@ import lotto645
 import win720
 import notification
 import time
+import requests
 
 
 def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers: list = None):
@@ -49,6 +50,20 @@ def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_
             notify.send_lotto_buying_message(userid, response, token, chat_id)
         else:
             notify.send_win720_buying_message(userid, response, token, chat_id)
+
+
+def check_network_connectivity() -> None:
+    targets = [
+        "https://www.dhlottery.co.kr/common.do?method=main",
+        "https://ol.dhlottery.co.kr/olotto/game/game645.do",
+    ]
+    for url in targets:
+        try:
+            print(f"[network] Checking connectivity url={url}")
+            res = requests.get(url, timeout=10)
+            print(f"[network] OK url={url} status={res.status_code}")
+        except requests.RequestException as exc:
+            print(f"[network] FAIL url={url} error={exc}")
 
 
 def check():
@@ -164,6 +179,8 @@ def buy():
     if len(manual_numbers) != manual_count:
         print("MANUAL_COUNT와 제공된 수동 번호의 개수가 일치하지 않습니다.")
         return
+
+    check_network_connectivity()
 
     for username, password in zip(usernames, passwords):
         print(f"Processing for user: {username}")

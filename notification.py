@@ -12,7 +12,7 @@ class Notification:
             if result_msg != "SUCCESS":
                 buy_round = result.get("buyRound", "알 수 없음")
                 message = f"{userid}님, {buy_round}회 로또 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
-                self._send_telegram(token, chat_id, message)
+                self._send_telegram(token, chat_id, message, escape_message=True)
                 return
 
             lotto_number_str = self.make_lotto_number_message(result.get("arrGameChoiceNum", []))
@@ -22,7 +22,7 @@ class Notification:
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
             error_message = f"{userid}님, 로또 구매 처리 중 오류 발생: {e}"
-            self._send_telegram(token, chat_id, error_message)
+            self._send_telegram(token, chat_id, error_message, escape_message=True)
 
     def make_lotto_number_message(self, lotto_number: list) -> str:
         assert type(lotto_number) == list
@@ -42,7 +42,7 @@ class Notification:
             if result_code != '100':
                 win720_round = result_msg.split("|")[3] if "|" in result_msg else "알 수 없음"
                 message = f"{userid}님, {win720_round}회 연금복권 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
-                self._send_telegram(token, chat_id, message)
+                self._send_telegram(token, chat_id, message, escape_message=True)
                 return
 
             win720_round = result_msg.split("|")[3]
@@ -52,7 +52,7 @@ class Notification:
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
             error_message = f"{userid}님, 연금복권 구매 처리 중 오류 발생: {e}"
-            self._send_telegram(token, chat_id, error_message)
+            self._send_telegram(token, chat_id, error_message, escape_message=True)
 
     def make_win720_number_message(self, win720_number: str) -> str:
         formatted_numbers = []
@@ -108,7 +108,7 @@ class Notification:
             self._send_telegram(token, chat_id, f"{results_block}\n{html.escape(winning_message)}")
         except KeyError:
             message = "로또 - 다음 기회에... 🫠"
-            self._send_telegram(token, chat_id, message)
+            self._send_telegram(token, chat_id, message, escape_message=True)
             return
 
     def send_win720_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
@@ -130,10 +130,12 @@ class Notification:
             print(f"[notify] send_win720_winning_message failed: {e}")
             return
 
-    def _send_telegram(self, token: str, chat_id: str, message: str) -> None:
+    def _send_telegram(self, token: str, chat_id: str, message: str, escape_message: bool = False) -> None:
         if token and chat_id:
             try:
                 url = f"https://api.telegram.org/bot{token}/sendMessage"
+                if escape_message:
+                    message = html.escape(message)
                 payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
                 r = requests.post(url, json=payload, timeout=10)
                 r.raise_for_status()
