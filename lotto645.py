@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Lotto645Mode(Enum):
     AUTO = 1
     MANUAL = 2
-    BUY = 10
+    BUY = 10 
     CHECK = 20
 
 class Lotto645:
@@ -45,28 +45,24 @@ class Lotto645:
         self.http_client = HttpClientSingleton.get_instance()
 
     def buy_lotto645(
-        self,
-        auth_ctrl: auth.AuthController,
-        cnt: int,
-        mode: Lotto645Mode,
-        manual_numbers: list = None
+        self, 
+        auth_ctrl: auth.AuthController, 
+        cnt: int, 
+        mode: Lotto645Mode
     ) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
         assert isinstance(cnt, int) and 1 <= cnt <= 5
         assert isinstance(mode, Lotto645Mode)
-        if mode == Lotto645Mode.MANUAL:
-            assert manual_numbers is not None, "수동 모드에서는 manual_numbers가 필요합니다."
 
         headers = self._generate_req_headers(auth_ctrl)
-
+        
         requirements = self._getRequirements(headers)
-
-        if mode == Lotto645Mode.AUTO:
-            data = self._generate_body_for_auto_mode(cnt, requirements)
-        elif mode == Lotto645Mode.MANUAL:
-            data = self._generate_body_for_manual(cnt, requirements, manual_numbers)
-        else:
-            raise ValueError(f"지원하지 않는 모드입니다: {mode}")
+        
+        data = (
+            self._generate_body_for_auto_mode(cnt, requirements)
+            if mode == Lotto645Mode.AUTO
+            else self._generate_body_for_manual(cnt)
+        )
 
         body = self._try_buying(headers, data)
 
@@ -82,7 +78,7 @@ class Lotto645:
 
         return {
             "round": requirements[3],
-            "direct": requirements[0],
+            "direct": requirements[0], 
             "nBuyAmount": str(1000 * cnt),
             "param": json.dumps(
                 [
@@ -90,40 +86,15 @@ class Lotto645:
                     for slot in common.SLOTS[:cnt]
                 ]
             ),
-            'ROUND_DRAW_DATE': requirements[1],
-            'WAMT_PAY_TLMT_END_DT': requirements[2],
+            'ROUND_DRAW_DATE' : requirements[1],
+            'WAMT_PAY_TLMT_END_DT' : requirements[2],
             "gameCnt": cnt,
             "saleMdaDcd": "10"
         }
 
-    def _generate_body_for_manual(self, cnt: int, requirements: list, manual_numbers: list) -> dict:
+    def _generate_body_for_manual(self, cnt: int) -> dict:
         assert isinstance(cnt, int) and 1 <= cnt <= 5
-        assert isinstance(manual_numbers, list) and len(manual_numbers) == cnt
-        for numbers in manual_numbers:
-            assert isinstance(numbers, list) and len(numbers) == 6
-            for num in numbers:
-                assert isinstance(num, str) and num.isdigit()
-                assert len(num) == 2
-
-        return {
-            "round": requirements[3],
-            "direct": requirements[0],
-            "nBuyAmount": str(1000 * cnt),
-            "param": json.dumps(
-                [
-                    {
-                        "genType": "1",
-                        "arrGameChoiceNum": ",".join(numbers),
-                        "alpabet": slot,
-                    }
-                    for numbers, slot in zip(manual_numbers, common.SLOTS[:cnt])
-                ]
-            ),
-            'ROUND_DRAW_DATE': requirements[1],
-            'WAMT_PAY_TLMT_END_DT': requirements[2],
-            "gameCnt": cnt,
-            "saleMdaDcd": "10",
-        }
+        raise NotImplementedError()
 
     def _getRequirements(self, headers: dict) -> list:
         headers["Referer"] = "https://ol.dhlottery.co.kr/olotto/game/game645.do"
@@ -134,31 +105,31 @@ class Lotto645:
         headers["Sec-Fetch-Dest"] = "empty"
 
         res = self.http_client.post(
-            url="https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json",
+            url="https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json", 
             headers=headers
         )
-
+        
         direct = json.loads(res.text)["ready_ip"]
-
+        
         html_headers = self._REQ_HEADERS.copy()
         html_headers.pop("Origin", None)
         html_headers.pop("Content-Type", None)
         html_headers["Referer"] = "https://dhlottery.co.kr/common.do?method=main"
-
+        
         if headers.get("Cookie"):
             html_headers["Cookie"] = headers.get("Cookie")
-
+            
         res = self.http_client.get(
-            url="https://ol.dhlottery.co.kr/olotto/game/game645.do",
+            url="https://ol.dhlottery.co.kr/olotto/game/game645.do", 
             headers=html_headers
         )
         html = res.text
         soup = BS(html, "html5lib")
-
+        
         try:
             draw_date_el = soup.find("input", id="ROUND_DRAW_DATE")
             tlmt_date_el = soup.find("input", id="WAMT_PAY_TLMT_END_DT")
-
+            
             if draw_date_el and tlmt_date_el:
                 draw_date = draw_date_el.get('value')
                 tlmt_date = tlmt_date_el.get('value')
@@ -170,10 +141,11 @@ class Lotto645:
             days_ahead = (5 - today.weekday()) % 7
             next_saturday = today + datetime.timedelta(days=days_ahead)
             draw_date = next_saturday.strftime("%Y-%m-%d")
-
+            
             limit_date = next_saturday + datetime.timedelta(days=366)
             tlmt_date = limit_date.strftime("%Y-%m-%d")
 
+        
         cur_round_input = soup.find("input", id="curRound")
         if cur_round_input:
             current_round = cur_round_input.get('value')
@@ -195,24 +167,28 @@ class Lotto645:
                 last_drawn_round = int(found.text)
                 return str(last_drawn_round + 1)
             else:
-                raise ValueError("lottoDrwNo not found")
+                 raise ValueError("lottoDrwNo not found")
         except Exception as e:
             base_date = datetime.datetime(2024, 12, 28)
             base_round = 1152
-
+            
             today = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-
+            
             days_ahead = (5 - today.weekday()) % 7
             next_saturday = today + datetime.timedelta(days=days_ahead)
-
+            
             weeks = (next_saturday - base_date).days // 7
             return str(base_round + weeks)
 
+
+
+
+        
     def _try_buying(self, headers: dict, data: dict) -> dict:
         assert isinstance(headers, dict)
         assert isinstance(data, dict)
 
-        headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
+        headers["Content-Type"]  = "application/x-www-form-urlencoded; charset=UTF-8"
 
         res = self.http_client.post(
             "https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
@@ -220,13 +196,13 @@ class Lotto645:
             data=data,
         )
         if res.encoding == 'ISO-8859-1':
-            res.encoding = 'euc-kr'
-
+             res.encoding = 'euc-kr'
+        
         try:
-            return json.loads(res.text)
+             return json.loads(res.text)
         except UnicodeDecodeError:
-            res.encoding = 'euc-kr'
-            return json.loads(res.text)
+             res.encoding = 'euc-kr' 
+             return json.loads(res.text)
 
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
@@ -258,11 +234,11 @@ class Lotto645:
             }
 
             res = self.http_client.get(api_url, params=params, headers=headers)
-
+            
             if res.status_code != 200:
                 print(f"DEBUG: API Status {res.status_code}")
                 pass
-
+            
             try:
                 data = res.json()
                 data = data.get("data", {})
@@ -273,18 +249,18 @@ class Lotto645:
                 data = {}
 
             if not data.get("list"):
-                return {"data": "no winning data (empty list or API fail)"}
+                 return {"data": "no winning data (empty list or API fail)"}
 
             for item in data["list"]:
                 purchased_date = item.get("eltOrdrDt", "-")
                 round_no = item.get("ltEpsdView", "")
                 money = item.get("ltWnAmt", "-")
-
+                
                 if "회" in round_no:
                     round_no = round_no.replace("회", "")
-
+                
                 if money == "0" or money == 0:
-                    money = "0 원"
+                     money = "0 원"
                 else:
                     money = f"{int(money):,} 원"
 
@@ -293,9 +269,9 @@ class Lotto645:
                     "money": money,
                     "purchased_date": purchased_date,
                     "winning_date": item.get("epsdRflDt", "-"),
-                    "lotto_details": []
+                    "lotto_details": [] 
                 }
-
+                
                 detail_url = "https://www.dhlottery.co.kr/mypage/lotto645TicketDetail.do"
                 detail_params = {
                     "ltGdsCd": item.get("ltGdsCd"),
@@ -305,27 +281,27 @@ class Lotto645:
                     "srchStrDt": params["srchStrDt"],
                     "srchEndDt": params["srchEndDt"]
                 }
-
+                
                 try:
                     res_detail = self.http_client.get(detail_url, params=detail_params, headers=headers)
                     detail_data = res_detail.json()
                     detail_data = detail_data.get("data", detail_data)
-
+                    
                     ticket = detail_data.get("ticket", {})
                     if not ticket and "data" in detail_data:
-                        ticket = detail_data["data"].get("ticket", {})
-
+                         ticket = detail_data["data"].get("ticket", {})
+                         
                     game_dtl = ticket.get("game_dtl", [])
                     win_num = ticket.get("win_num", [])
-
+                    
                     lotto_details = []
-
+                    
                     for i, game in enumerate(game_dtl):
                         label = common.SLOTS[i] if i < len(common.SLOTS) else "?"
-
+                        
                         rank = game.get("rank", "0")
                         status = "낙첨" if rank == "0" else f"{rank}등"
-
+                        
                         nums = game.get("num", [])
                         formatted_nums = []
                         for num in nums:
@@ -333,20 +309,21 @@ class Lotto645:
                                 formatted_nums.append(f"✨{num}")
                             else:
                                 formatted_nums.append(str(num))
-
+                        
                         lotto_details.append({
                             "label": label,
                             "status": status,
                             "result": formatted_nums
                         })
-
+                    
                     result_data["lotto_details"] = lotto_details
 
                 except (requests.RequestException, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
                     logger.error(f"[Error] Detail parse error (url={detail_url}, params={detail_params}): {e}")
-
+                
                 break
-
+ 
+                            
         except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
             logger.error(f"[Error] Lotto check error: {e}")
         except Exception as e:
@@ -354,6 +331,7 @@ class Lotto645:
             raise
 
         return result_data
+    
 
     def _show_result(self, body: dict) -> None:
         assert isinstance(body, dict)
@@ -362,5 +340,5 @@ class Lotto645:
             return
 
         result = body.get("result", {})
-        if result.get("resultMsg", "FAILURE").upper() != "SUCCESS":
+        if result.get("resultMsg", "FAILURE").upper() != "SUCCESS":    
             return
