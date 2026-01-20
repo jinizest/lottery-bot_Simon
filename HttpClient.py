@@ -1,9 +1,24 @@
 import requests
+from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
+from urllib3.util import Retry
 
 class HttpClient:
-    def __init__(self):
+    def __init__(self, timeout: int = 30, max_retries: int = 3):
         self.session = requests.Session()
+        self.timeout = timeout
+        retry_strategy = Retry(
+            total=max_retries,
+            connect=max_retries,
+            read=max_retries,
+            status=max_retries,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("GET", "POST"),
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def __del__(self):
         self.session.close()
@@ -14,7 +29,13 @@ class HttpClient:
             session_headers.update(headers)
         try:
             print(f"[http] POST url={url}")
-            res = self.session.post(url, headers=session_headers, data=data, timeout=30, allow_redirects=True)
+            res = self.session.post(
+                url,
+                headers=session_headers,
+                data=data,
+                timeout=self.timeout,
+                allow_redirects=True,
+            )
             res.raise_for_status()
             print(f"[http] POST success url={url} status={res.status_code}")
             return res
@@ -28,7 +49,12 @@ class HttpClient:
             session_headers.update(headers)
         try:
             print(f"[http] GET url={url}")
-            res = self.session.get(url, headers=session_headers, params=params, timeout=30)
+            res = self.session.get(
+                url,
+                headers=session_headers,
+                params=params,
+                timeout=self.timeout,
+            )
             res.raise_for_status()
             print(f"[http] GET success url={url} status={res.status_code}")
             return res
