@@ -6,6 +6,7 @@ from datetime import timedelta
 from enum import Enum
 
 from bs4 import BeautifulSoup as BS
+from typing import List, Optional
 
 import auth
 import common
@@ -48,7 +49,8 @@ class Lotto645:
         self, 
         auth_ctrl: auth.AuthController, 
         cnt: int, 
-        mode: Lotto645Mode
+        mode: Lotto645Mode,
+        manual_numbers: Optional[List[List[str]]] = None,
     ) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
         assert isinstance(cnt, int) and 1 <= cnt <= 5
@@ -61,7 +63,7 @@ class Lotto645:
         data = (
             self._generate_body_for_auto_mode(cnt, requirements)
             if mode == Lotto645Mode.AUTO
-            else self._generate_body_for_manual(cnt)
+            else self._generate_body_for_manual(cnt, requirements, manual_numbers)
         )
 
         body = self._try_buying(headers, data)
@@ -92,9 +94,40 @@ class Lotto645:
             "saleMdaDcd": "10"
         }
 
-    def _generate_body_for_manual(self, cnt: int) -> dict:
+    def _generate_body_for_manual(self, cnt: int, requirements: list, manual_numbers: Optional[List[List[str]]]) -> dict:
         assert isinstance(cnt, int) and 1 <= cnt <= 5
-        raise NotImplementedError()
+        if not manual_numbers:
+            raise ValueError("manual_numbers are required for manual mode.")
+
+        if len(manual_numbers) != cnt:
+            raise ValueError("manual_numbers count must match cnt.")
+
+        normalized_numbers = []
+        for entry in manual_numbers:
+            if len(entry) != 6:
+                raise ValueError("Each manual entry must contain 6 numbers.")
+            normalized_entry = [f"{int(num):02d}" for num in entry]
+            normalized_numbers.append(normalized_entry)
+
+        return {
+            "round": requirements[3],
+            "direct": requirements[0],
+            "nBuyAmount": str(1000 * cnt),
+            "param": json.dumps(
+                [
+                    {
+                        "genType": "1",
+                        "arrGameChoiceNum": numbers,
+                        "alpabet": slot,
+                    }
+                    for slot, numbers in zip(common.SLOTS[:cnt], normalized_numbers)
+                ]
+            ),
+            "ROUND_DRAW_DATE": requirements[1],
+            "WAMT_PAY_TLMT_END_DT": requirements[2],
+            "gameCnt": cnt,
+            "saleMdaDcd": "10",
+        }
 
     def _getRequirements(self, headers: dict) -> list:
         headers["Referer"] = "https://ol.dhlottery.co.kr/olotto/game/game645.do"
