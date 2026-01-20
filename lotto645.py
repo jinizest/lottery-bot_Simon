@@ -104,11 +104,13 @@ class Lotto645:
         headers["Sec-Fetch-Mode"] = "cors"
         headers["Sec-Fetch-Dest"] = "empty"
 
+        print("[lotto645] Fetching purchase requirements (ready socket)")
         res = self.http_client.post(
-            url="https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json", 
+            url="https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json",
             headers=headers
         )
-        
+
+        print("[lotto645] Ready socket response received")
         direct = json.loads(res.text)["ready_ip"]
         
         html_headers = self._REQ_HEADERS.copy()
@@ -119,10 +121,12 @@ class Lotto645:
         if headers.get("Cookie"):
             html_headers["Cookie"] = headers.get("Cookie")
             
+        print("[lotto645] Fetching game page for draw dates")
         res = self.http_client.get(
-            url="https://ol.dhlottery.co.kr/olotto/game/game645.do", 
+            url="https://ol.dhlottery.co.kr/olotto/game/game645.do",
             headers=html_headers
         )
+        print("[lotto645] Game page response received")
         html = res.text
         soup = BS(html, "html5lib")
         

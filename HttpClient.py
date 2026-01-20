@@ -1,4 +1,5 @@
 import requests
+from requests.exceptions import RequestException
 
 class HttpClient:
     def __init__(self):
@@ -11,17 +12,29 @@ class HttpClient:
         session_headers = self.session.headers.copy()
         if headers:
             session_headers.update(headers)
-        res = self.session.post(url, headers=session_headers, data=data, timeout=30, allow_redirects=True)
-        res.raise_for_status()
-        return res
+        try:
+            print(f"[http] POST url={url}")
+            res = self.session.post(url, headers=session_headers, data=data, timeout=30, allow_redirects=True)
+            res.raise_for_status()
+            print(f"[http] POST success url={url} status={res.status_code}")
+            return res
+        except RequestException as exc:
+            print(f"[http] POST failed url={url} error={exc}")
+            raise
 
     def get(self, url: str, headers: dict = None, params: dict = None) -> requests.Response:
         session_headers = self.session.headers.copy()
         if headers:
             session_headers.update(headers)
-        res = self.session.get(url, headers=session_headers, params=params, timeout=30)
-        res.raise_for_status()
-        return res
+        try:
+            print(f"[http] GET url={url}")
+            res = self.session.get(url, headers=session_headers, params=params, timeout=30)
+            res.raise_for_status()
+            print(f"[http] GET success url={url} status={res.status_code}")
+            return res
+        except RequestException as exc:
+            print(f"[http] GET failed url={url} error={exc}")
+            raise
 
 class HttpClientSingleton:
     _instance = None
