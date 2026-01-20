@@ -52,18 +52,21 @@ def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_
             notify.send_win720_buying_message(userid, response, token, chat_id)
 
 
-def check_network_connectivity() -> None:
+def check_network_connectivity() -> bool:
     targets = [
         "https://www.dhlottery.co.kr/common.do?method=main",
         "https://ol.dhlottery.co.kr/olotto/game/game645.do",
     ]
+    ok = True
     for url in targets:
         try:
             print(f"[network] Checking connectivity url={url}")
             res = requests.get(url, timeout=10)
             print(f"[network] OK url={url} status={res.status_code}")
         except requests.RequestException as exc:
+            ok = False
             print(f"[network] FAIL url={url} error={exc}")
+    return ok
 
 
 def check():
@@ -180,7 +183,9 @@ def buy():
         print("MANUAL_COUNT와 제공된 수동 번호의 개수가 일치하지 않습니다.")
         return
 
-    check_network_connectivity()
+    if not check_network_connectivity():
+        print("[controller] 네트워크 연결 실패로 구매를 중단합니다.")
+        return
 
     for username, password in zip(usernames, passwords):
         print(f"Processing for user: {username}")
@@ -205,14 +210,28 @@ def buy():
                 print(f"[controller] 로그인 실패 for user {username}: {e}")
                 continue
 
+        def _safe_balance() -> str:
+            try:
+                return globalAuthCtrl.get_user_balance()
+            except Exception as exc:
+                return f"조회 실패: {exc}"
+
         if auto_count > 0:
-            response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
+            try:
+                response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
+            except requests.RequestException as exc:
+                response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
+            response['balance'] = _safe_balance()
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
         time.sleep(5)
 
         if manual_count > 0:
-            response = buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers)
+            try:
+                response = buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers)
+            except requests.RequestException as exc:
+                response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
+            response['balance'] = _safe_balance()
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
         time.sleep(10)

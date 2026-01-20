@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 import requests
 
 from datetime import timedelta
@@ -227,19 +228,32 @@ class Lotto645:
 
         headers["Content-Type"]  = "application/x-www-form-urlencoded; charset=UTF-8"
 
-        res = self.http_client.post(
-            "https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
-            headers=headers,
-            data=data,
-        )
-        if res.encoding == 'ISO-8859-1':
-             res.encoding = 'euc-kr'
-        
-        try:
-             return json.loads(res.text)
-        except UnicodeDecodeError:
-             res.encoding = 'euc-kr' 
-             return json.loads(res.text)
+        attempts = 3
+        for attempt in range(1, attempts + 1):
+            try:
+                res = self.http_client.post(
+                    "https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
+                    headers=headers,
+                    data=data,
+                )
+                if res.encoding == 'ISO-8859-1':
+                    res.encoding = 'euc-kr'
+
+                try:
+                    return json.loads(res.text)
+                except UnicodeDecodeError:
+                    res.encoding = 'euc-kr'
+                    return json.loads(res.text)
+            except requests.RequestException as exc:
+                if attempt == attempts:
+                    raise
+                wait_seconds = 2 ** (attempt - 1)
+                print(
+                    "[lotto645] Buy request failed "
+                    f"(attempt {attempt}/{attempts}): {exc}. "
+                    f"Retrying in {wait_seconds}s"
+                )
+                time.sleep(wait_seconds)
 
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)

@@ -1,12 +1,26 @@
+import os
+import time
 import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from urllib3.util import Retry
 
 class HttpClient:
-    def __init__(self, timeout: int = 30, max_retries: int = 3):
+    def __init__(
+        self,
+        timeout: int = 60,
+        max_retries: int = 3,
+        connect_timeout: int = None,
+        read_timeout: int = None,
+        request_delay: float = None,
+    ):
         self.session = requests.Session()
-        self.timeout = timeout
+        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "10"))
+        read = read_timeout or int(os.getenv("READ_TIMEOUT", str(timeout)))
+        self.timeout = (connect, read)
+        self.request_delay = request_delay if request_delay is not None else float(
+            os.getenv("REQUEST_DELAY", "0.3")
+        )
         retry_strategy = Retry(
             total=max_retries,
             connect=max_retries,
@@ -28,6 +42,8 @@ class HttpClient:
         if headers:
             session_headers.update(headers)
         try:
+            if self.request_delay > 0:
+                time.sleep(self.request_delay)
             print(f"[http] POST url={url}")
             res = self.session.post(
                 url,
@@ -48,6 +64,8 @@ class HttpClient:
         if headers:
             session_headers.update(headers)
         try:
+            if self.request_delay > 0:
+                time.sleep(self.request_delay)
             print(f"[http] GET url={url}")
             res = self.session.get(
                 url,
