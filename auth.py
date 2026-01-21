@@ -38,10 +38,12 @@ class AuthController:
         assert isinstance(user_id, str)
         assert isinstance(password, str)
 
-        self.http_client.get("https://dhlottery.co.kr/", headers=self._REQ_HEADERS)
-        self.http_client.get("https://dhlottery.co.kr/user.do?method=login", headers=self._REQ_HEADERS)
-        self.http_client.get("https://www.dhlottery.co.kr/", headers=self._REQ_HEADERS)
-        self.http_client.get("https://www.dhlottery.co.kr/user.do?method=login", headers=self._REQ_HEADERS)
+        login_headers = copy.deepcopy(self._REQ_HEADERS)
+        login_headers.update({
+            "Origin": "https://www.dhlottery.co.kr",
+            "Referer": "https://www.dhlottery.co.kr/",
+        })
+        self.http_client.get("https://www.dhlottery.co.kr/user.do?method=login", headers=login_headers)
 
         modulus, exponent = self._get_rsa_key()
 
@@ -136,11 +138,6 @@ class AuthController:
         if new_jsessionid:
              self._update_auth_cred(new_jsessionid)
 
-        try:
-             self.http_client.get("https://dhlottery.co.kr/main", headers=self._REQ_HEADERS)
-        except Exception as e:
-             print(f"[Warning] Failed to check main page after login: {e}")
-             
         return res
 
     def _update_auth_cred(self, j_session_id: str) -> None:
