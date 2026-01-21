@@ -298,6 +298,36 @@ class Win720:
                                     label = common.SLOTS[i] if i < len(common.SLOTS) else "?"
 
                                     info_cn = d_item.get("ltGmInfoCn", "")
+                                    if isinstance(info_cn, dict):
+                                        group = (
+                                            info_cn.get("group")
+                                            or info_cn.get("grp")
+                                            or info_cn.get("jo")
+                                            or info_cn.get("groupNo")
+                                            or info_cn.get("joNo")
+                                        )
+                                        number = (
+                                            info_cn.get("number")
+                                            or info_cn.get("num")
+                                            or info_cn.get("no")
+                                            or info_cn.get("digits")
+                                        )
+                                        if group is not None and number is not None:
+                                            info_cn = f"{group}:{number}"
+                                        elif len(info_cn) == 1:
+                                            key, value = next(iter(info_cn.items()))
+                                            info_cn = f"{key}:{value}"
+                                        else:
+                                            info_cn = str(info_cn)
+                                    elif isinstance(info_cn, (list, tuple)):
+                                        if len(info_cn) >= 2:
+                                            info_cn = f"{info_cn[0]}:{info_cn[1]}"
+                                        else:
+                                            info_cn = ",".join(str(value) for value in info_cn)
+                                    elif info_cn is None:
+                                        info_cn = ""
+                                    else:
+                                        info_cn = str(info_cn)
 
                                     rank = d_item.get("wnRnk")
                                     if rank is None:

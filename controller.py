@@ -8,6 +8,7 @@ import win720
 import notification
 import time
 import requests
+from HttpClient import HttpClientSingleton
 
 
 def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers: list = None):
@@ -57,11 +58,13 @@ def check_network_connectivity() -> bool:
         "https://www.dhlottery.co.kr/common.do?method=main",
         "https://ol.dhlottery.co.kr/olotto/game/game645.do",
     ]
+    http_client = HttpClientSingleton.get_instance()
+    headers = {"User-Agent": auth.USER_AGENT}
     ok = True
     for url in targets:
         try:
             print(f"[network] Checking connectivity url={url}")
-            res = requests.get(url, timeout=10)
+            res = http_client.get(url, headers=headers)
             print(f"[network] OK url={url} status={res.status_code}")
         except requests.RequestException as exc:
             ok = False
