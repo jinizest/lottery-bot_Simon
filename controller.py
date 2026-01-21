@@ -57,6 +57,7 @@ def check_network_connectivity() -> bool:
     targets = [
         "https://www.dhlottery.co.kr/common.do?method=main",
         "https://ol.dhlottery.co.kr/olotto/game/game645.do",
+        "https://el.dhlottery.co.kr/game/pension720/game.jsp",
     ]
     http_client = HttpClientSingleton.get_instance()
     headers = {"User-Agent": auth.USER_AGENT}
@@ -190,6 +191,18 @@ def buy():
         print("[controller] 네트워크 연결 실패로 구매를 중단합니다.")
         return
 
+    def _retry_purchase(label, func, attempts=3, delay=3):
+        last_exc = None
+        for attempt in range(1, attempts + 1):
+            try:
+                return func()
+            except requests.RequestException as exc:
+                last_exc = exc
+                print(f"[controller] {label} 네트워크 오류 (시도 {attempt}/{attempts}): {exc}")
+                if attempt < attempts:
+                    time.sleep(delay * attempt)
+        raise last_exc
+
     for username, password in zip(usernames, passwords):
         print(f"Processing for user: {username}")
 
@@ -221,7 +234,10 @@ def buy():
 
         if auto_count > 0:
             try:
-                response = buy_lotto645(globalAuthCtrl, auto_count, "AUTO")
+                response = _retry_purchase(
+                    "로또 자동 구매",
+                    lambda: buy_lotto645(globalAuthCtrl, auto_count, "AUTO"),
+                )
             except requests.RequestException as exc:
                 response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
             response['balance'] = _safe_balance()
@@ -231,7 +247,10 @@ def buy():
 
         if manual_count > 0:
             try:
-                response = buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers)
+                response = _retry_purchase(
+                    "로또 수동 구매",
+                    lambda: buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers),
+                )
             except requests.RequestException as exc:
                 response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
             response['balance'] = _safe_balance()
@@ -243,7 +262,15 @@ def buy():
         globalAuthCtrl.login(username, password)
 
         try:
-            response = buy_win720(globalAuthCtrl, username)
+            response = _retry_purchase(
+                "연금복권 구매",
+                lambda: buy_win720(globalAuthCtrl, username),
+            )
+            send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+        except requests.RequestException as e:
+            print(f"[controller] 연금복권 구매 실패 for user {username}: {e}")
+            response = {"resultCode": "NETWORK_ERROR", "resultMsg": f"NETWORK_ERROR: {e}"}
+            response["balance"] = _safe_balance()
             send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
         except Exception as e:
             print(f"[controller] 연금복권 구매 실패 for user {username}: {e}")
