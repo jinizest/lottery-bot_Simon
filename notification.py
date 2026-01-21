@@ -1,4 +1,5 @@
 import html
+import json
 import re
 import requests
 
@@ -39,13 +40,23 @@ class Notification:
             result_msg = body.get("resultMsg", "알 수 없는 오류")
             balance = body.get("balance", "N/A")
 
+            result_msg_text = self._stringify_result_msg(result_msg)
+
             if result_code != '100':
-                win720_round = result_msg.split("|")[3] if "|" in result_msg else "알 수 없음"
-                message = f"{userid}님, {win720_round}회 연금복권 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
+                win720_round = body.get("round", "알 수 없음")
+                if "|" in result_msg_text:
+                    parts = result_msg_text.split("|")
+                    if len(parts) > 3 and parts[3]:
+                        win720_round = parts[3]
+                message = f"{userid}님, {win720_round}회 연금복권 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg_text}"
                 self._send_telegram(token, chat_id, message, escape_message=True)
                 return
 
-            win720_round = result_msg.split("|")[3]
+            win720_round = body.get("round", "알 수 없음")
+            if "|" in result_msg_text:
+                parts = result_msg_text.split("|")
+                if len(parts) > 3 and parts[3]:
+                    win720_round = parts[3]
             win720_number_str = self.make_win720_number_message(body.get("saleTicket", ""))
             win720_block = f"<pre>{html.escape(win720_number_str)}</pre>"
             message = f"{html.escape(userid + '님, ' + str(win720_round) + '회 연금복권 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{win720_block}"
@@ -55,11 +66,32 @@ class Notification:
             self._send_telegram(token, chat_id, error_message, escape_message=True)
 
     def make_win720_number_message(self, win720_number: str) -> str:
+        if isinstance(win720_number, (list, tuple)):
+            win720_number = ",".join(str(value) for value in win720_number)
+        elif isinstance(win720_number, dict):
+            win720_number = json.dumps(win720_number, ensure_ascii=False)
+        elif win720_number is None:
+            win720_number = ""
+
         formatted_numbers = []
-        for number in win720_number.split(","):
+        for number in str(win720_number).split(","):
+            if not number:
+                continue
             formatted_number = f"{number[0]}조 " + " ".join(number[1:])
             formatted_numbers.append(formatted_number)
         return "\n".join(formatted_numbers)
+
+    def _stringify_result_msg(self, result_msg) -> str:
+        if isinstance(result_msg, str):
+            return result_msg
+        if isinstance(result_msg, (dict, list, tuple)):
+            try:
+                return json.dumps(result_msg, ensure_ascii=False)
+            except (TypeError, ValueError):
+                return str(result_msg)
+        if result_msg is None:
+            return "알 수 없는 오류"
+        return str(result_msg)
 
     def send_lotto_winning_message(self, userid: str, winning: dict, token: str, chat_id: str) -> None:
         assert type(winning) == dict
