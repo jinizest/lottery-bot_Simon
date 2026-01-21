@@ -8,18 +8,18 @@ from urllib3.util import Retry
 class HttpClient:
     def __init__(
         self,
-        timeout: int = 60,
+        timeout: int = 90,
         max_retries: int = 3,
         connect_timeout: int = None,
         read_timeout: int = None,
         request_delay: float = None,
     ):
         self.session = requests.Session()
-        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "10"))
+        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "30"))
         read = read_timeout or int(os.getenv("READ_TIMEOUT", str(timeout)))
         self.timeout = (connect, read)
         self.request_delay = request_delay if request_delay is not None else float(
-            os.getenv("REQUEST_DELAY", "0.3")
+            os.getenv("REQUEST_DELAY", "0.6")
         )
         retry_strategy = Retry(
             total=max_retries,
