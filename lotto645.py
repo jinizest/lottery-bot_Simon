@@ -244,6 +244,15 @@ class Lotto645:
                 except UnicodeDecodeError:
                     res.encoding = 'euc-kr'
                     return json.loads(res.text)
+                except json.JSONDecodeError as exc:
+                    if attempt == attempts:
+                        raise
+                    logger.warning(
+                        "[lotto645] Non-JSON response received "
+                        f"(attempt {attempt}/{attempts}): status={res.status_code}, "
+                        f"content_type={res.headers.get('Content-Type')}, "
+                        f"length={len(res.text)}. Retrying in {2 ** (attempt - 1)}s."
+                    )
             except requests.RequestException as exc:
                 if attempt == attempts:
                     raise
@@ -253,7 +262,7 @@ class Lotto645:
                     f"(attempt {attempt}/{attempts}): {exc}. "
                     f"Retrying in {wait_seconds}s"
                 )
-                time.sleep(wait_seconds)
+            time.sleep(2 ** (attempt - 1))
 
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
