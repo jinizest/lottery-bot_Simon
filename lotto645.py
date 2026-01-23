@@ -16,6 +16,13 @@ from HttpClient import HttpClientSingleton
 
 logger = logging.getLogger(__name__)
 
+class NonJsonResponseError(Exception):
+    def __init__(self, message: str, status_code: int, content_type: str, body_preview: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.content_type = content_type
+        self.body_preview = body_preview
+
 class Lotto645Mode(Enum):
     AUTO = 1
     MANUAL = 2
@@ -228,7 +235,7 @@ class Lotto645:
 
         headers["Content-Type"]  = "application/x-www-form-urlencoded; charset=UTF-8"
 
-        attempts = 3
+        attempts = 5
         for attempt in range(1, attempts + 1):
             try:
                 res = self.http_client.post(
@@ -239,14 +246,30 @@ class Lotto645:
                 if res.encoding == 'ISO-8859-1':
                     res.encoding = 'euc-kr'
 
+                content_type = res.headers.get("Content-Type", "")
+                body_text = res.text.strip()
+                if "text/html" in content_type or body_text.startswith("<"):
+                    raise NonJsonResponseError(
+                        "HTML response received from execBuy.do",
+                        res.status_code,
+                        content_type,
+                        body_text[:200],
+                    )
+
                 try:
                     return json.loads(res.text)
                 except UnicodeDecodeError:
                     res.encoding = 'euc-kr'
                     return json.loads(res.text)
-                except json.JSONDecodeError as exc:
+                except json.JSONDecodeError:
                     if attempt == attempts:
-                        raise
+                        body_preview = res.text.strip()[:200]
+                        raise NonJsonResponseError(
+                            "Non-JSON response received from execBuy.do",
+                            res.status_code,
+                            res.headers.get("Content-Type", ""),
+                            body_preview,
+                        )
                     logger.warning(
                         "[lotto645] Non-JSON response received "
                         f"(attempt {attempt}/{attempts}): status={res.status_code}, "
@@ -262,7 +285,7 @@ class Lotto645:
                     f"(attempt {attempt}/{attempts}): {exc}. "
                     f"Retrying in {wait_seconds}s"
                 )
-            time.sleep(2 ** (attempt - 1))
+            time.sleep(min(2, 2 ** (attempt - 1)))
 
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
