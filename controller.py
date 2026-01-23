@@ -61,8 +61,6 @@ def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_
 def check_network_connectivity() -> bool:
     targets = [
         "https://www.dhlottery.co.kr/common.do?method=main",
-        "https://ol.dhlottery.co.kr/olotto/game/game645.do",
-        "https://el.dhlottery.co.kr/game/pension720/game.jsp",
     ]
     http_client = HttpClientSingleton.get_instance()
     headers = {"User-Agent": auth.USER_AGENT}
@@ -274,7 +272,7 @@ def buy():
             response['balance'] = _safe_balance()
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        time.sleep(5)
+        time.sleep(3)
 
         if manual_count > 0:
             try:
@@ -290,7 +288,7 @@ def buy():
             response['balance'] = _safe_balance()
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
-        time.sleep(10)
+        time.sleep(3)
 
         globalAuthCtrl.http_client.session.cookies.clear()
         globalAuthCtrl.login(username, password)
