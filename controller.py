@@ -152,8 +152,8 @@ def buy():
 
     usernames = os.environ.get('USERNAME', '').splitlines()
     passwords = os.environ.get('PASSWORD', '').splitlines()
-    auto_count = int(os.environ.get('AUTO_COUNT', 5))
-    manual_count = int(os.environ.get('MANUAL_COUNT', 0))
+    auto_count = int(os.environ.get('AUTO_COUNT', 3))
+    manual_count = int(os.environ.get('MANUAL_COUNT', 2))
     manual_numbers_raw = os.environ.get('MANUAL_NUMBERS_RAW', '').splitlines()
     telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
