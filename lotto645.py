@@ -14,6 +14,7 @@ import common
 import logging
 from HttpClient import HttpClientSingleton
 
+common.setup_logging()
 logger = logging.getLogger(__name__)
 
 class NonJsonResponseError(Exception):
@@ -145,13 +146,13 @@ class Lotto645:
         headers["Sec-Fetch-Mode"] = "cors"
         headers["Sec-Fetch-Dest"] = "empty"
 
-        print("[lotto645] Fetching purchase requirements (ready socket)")
+        logger.info("[lotto645] Fetching purchase requirements (ready socket)")
         res = self.http_client.post(
             url="https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json",
             headers=headers
         )
 
-        print("[lotto645] Ready socket response received")
+        logger.info("[lotto645] Ready socket response received")
         direct = json.loads(res.text)["ready_ip"]
         
         html_headers = self._REQ_HEADERS.copy()
@@ -162,12 +163,12 @@ class Lotto645:
         if headers.get("Cookie"):
             html_headers["Cookie"] = headers.get("Cookie")
             
-        print("[lotto645] Fetching game page for draw dates")
+        logger.info("[lotto645] Fetching game page for draw dates")
         res = self.http_client.get(
             url="https://ol.dhlottery.co.kr/olotto/game/game645.do",
             headers=html_headers
         )
-        print("[lotto645] Game page response received")
+        logger.info("[lotto645] Game page response received")
         html = res.text
         soup = BS(html, "html5lib")
         
@@ -280,7 +281,7 @@ class Lotto645:
                 if attempt == attempts:
                     raise
                 wait_seconds = 2 ** (attempt - 1)
-                print(
+                logger.warning(
                     "[lotto645] Buy request failed "
                     f"(attempt {attempt}/{attempts}): {exc}. "
                     f"Retrying in {wait_seconds}s"
@@ -300,7 +301,7 @@ class Lotto645:
         try:
             self.http_client.get("https://www.dhlottery.co.kr/common.do?method=main", headers=headers)
         except requests.RequestException as e:
-            print(f"[Warning] Warm-up request failed: {e}")
+            logger.warning("[Warning] Warm-up request failed: %s", e)
 
         result_data = {
             "data": "no winning data"
@@ -319,14 +320,14 @@ class Lotto645:
             res = self.http_client.get(api_url, params=params, headers=headers)
             
             if res.status_code != 200:
-                print(f"DEBUG: API Status {res.status_code}")
+                logger.debug("DEBUG: API Status %s", res.status_code)
                 pass
             
             try:
                 data = res.json()
                 data = data.get("data", {})
                 if "list" not in data:
-                    print("DEBUG_DATA_LIST_MISSING_IN_DATA")
+                    logger.debug("DEBUG_DATA_LIST_MISSING_IN_DATA")
             except (json.JSONDecodeError, AttributeError, KeyError) as e:
                 logger.error(f"[Error] API JSON Parse Failed: {e}")
                 data = {}

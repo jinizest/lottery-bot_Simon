@@ -1,9 +1,15 @@
 import os
 import time
+import logging
 import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from urllib3.util import Retry
+
+import common
+
+common.setup_logging()
+logger = logging.getLogger(__name__)
 
 class HttpClient:
     def __init__(
@@ -44,7 +50,7 @@ class HttpClient:
         try:
             if self.request_delay > 0:
                 time.sleep(self.request_delay)
-            print(f"[http] POST url={url}")
+            logger.info("[http] POST url=%s", url)
             res = self.session.post(
                 url,
                 headers=session_headers,
@@ -53,10 +59,10 @@ class HttpClient:
                 allow_redirects=True,
             )
             res.raise_for_status()
-            print(f"[http] POST success url={url} status={res.status_code}")
+            logger.info("[http] POST success url=%s status=%s", url, res.status_code)
             return res
         except RequestException as exc:
-            print(f"[http] POST failed url={url} error={exc}")
+            logger.error("[http] POST failed url=%s error=%s", url, exc)
             raise
 
     def get(self, url: str, headers: dict = None, params: dict = None) -> requests.Response:
@@ -66,7 +72,7 @@ class HttpClient:
         try:
             if self.request_delay > 0:
                 time.sleep(self.request_delay)
-            print(f"[http] GET url={url}")
+            logger.info("[http] GET url=%s", url)
             res = self.session.get(
                 url,
                 headers=session_headers,
@@ -74,10 +80,10 @@ class HttpClient:
                 timeout=self.timeout,
             )
             res.raise_for_status()
-            print(f"[http] GET success url={url} status={res.status_code}")
+            logger.info("[http] GET success url=%s status=%s", url, res.status_code)
             return res
         except RequestException as exc:
-            print(f"[http] GET failed url={url} error={exc}")
+            logger.error("[http] GET failed url=%s error=%s", url, exc)
             raise
 
 class HttpClientSingleton:

@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from dotenv import load_dotenv
 
 import auth
@@ -9,6 +10,10 @@ import notification
 import time
 import requests
 from HttpClient import HttpClientSingleton
+import common
+
+common.setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers: list = None):
@@ -64,12 +69,12 @@ def check_network_connectivity() -> bool:
     ok = True
     for url in targets:
         try:
-            print(f"[network] Checking connectivity url={url}")
+            logger.info("[network] Checking connectivity url=%s", url)
             res = http_client.get(url, headers=headers)
-            print(f"[network] OK url={url} status={res.status_code}")
+            logger.info("[network] OK url=%s status=%s", url, res.status_code)
         except requests.RequestException as exc:
             ok = False
-            print(f"[network] FAIL url={url} error={exc}")
+            logger.error("[network] FAIL url=%s error=%s", url, exc)
     return ok
 
 
@@ -82,15 +87,15 @@ def check():
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
     if not telegram_bot_token or not telegram_chat_id:
-        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        logger.warning("Telegram 환경 변수가 설정되지 않았습니다.")
         return
 
     if len(usernames) != len(passwords):
-        print("USERNAME과 PASSWORD의 개수가 일치하지 않습니다.")
+        logger.warning("USERNAME과 PASSWORD의 개수가 일치하지 않습니다.")
         return
 
     for username, password in zip(usernames, passwords):
-        print(f"Processing for user: {username}")
+        logger.info("Processing for user: %s", username)
 
         globalAuthCtrl = auth.AuthController()
         try:
@@ -102,7 +107,7 @@ def check():
 
             globalAuthCtrl.login(username, password)
         except Exception as e:
-            print(f"[controller] 로그인 실패 for user {username}: {e}")
+            logger.error("[controller] 로그인 실패 for user %s: %s", username, e)
             continue
 
         response = check_winning_lotto645(globalAuthCtrl)
@@ -122,11 +127,11 @@ def check_win():
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
     if not telegram_bot_token or not telegram_chat_id:
-        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        logger.warning("Telegram 환경 변수가 설정되지 않았습니다.")
         return
 
     for username, password in zip(usernames, passwords):
-        print(f"Processing for user: {username}")
+        logger.info("Processing for user: %s", username)
 
         globalAuthCtrl = auth.AuthController()
         try:
@@ -138,7 +143,7 @@ def check_win():
 
             globalAuthCtrl.login(username, password)
         except Exception as e:
-            print(f"[controller] 로그인 실패 for user {username}: {e}")
+            logger.error("[controller] 로그인 실패 for user %s: %s", username, e)
             continue
 
         response = check_winning_win720(globalAuthCtrl)
@@ -156,12 +161,12 @@ def buy():
     telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
     if not telegram_bot_token or not telegram_chat_id:
-        print("Telegram 환경 변수가 설정되지 않았습니다.")
+        logger.warning("Telegram 환경 변수가 설정되지 않았습니다.")
         return
 
     total_count = auto_count + manual_count
     if total_count > 5:
-        print("AUTO_COUNT와 MANUAL_COUNT의 합은 최대 5개여야 합니다.")
+        logger.warning("AUTO_COUNT와 MANUAL_COUNT의 합은 최대 5개여야 합니다.")
         return
 
     manual_numbers = []
@@ -180,15 +185,15 @@ def buy():
 
             manual_numbers.append(formatted_numbers)
         except ValueError as e:
-            print(f"수동 번호 처리 중 오류 발생: {e}")
+            logger.error("수동 번호 처리 중 오류 발생: %s", e)
             return
 
     if len(manual_numbers) != manual_count:
-        print("MANUAL_COUNT와 제공된 수동 번호의 개수가 일치하지 않습니다.")
+        logger.warning("MANUAL_COUNT와 제공된 수동 번호의 개수가 일치하지 않습니다.")
         return
 
     if not check_network_connectivity():
-        print("[controller] 네트워크 연결 실패로 구매를 중단합니다.")
+        logger.error("[controller] 네트워크 연결 실패로 구매를 중단합니다.")
         return
 
     def _retry_purchase(label, func, attempts=6, delay=1, reauth=None, reauth_attempts=1):
@@ -199,29 +204,35 @@ def buy():
                 return func()
             except lotto645.NonJsonResponseError as exc:
                 last_exc = exc
-                print(
+                logger.warning(
                     f"[controller] {label} 응답이 JSON이 아님 "
                     f"(시도 {attempt}/{attempts}, status={exc.status_code}, "
                     f"content_type={exc.content_type})."
                 )
                 if reauth and reauth_used < reauth_attempts:
                     reauth_used += 1
-                    print(f"[controller] {label} 로그인 재시도 후 재구매합니다.")
+                    logger.info("[controller] %s 로그인 재시도 후 재구매합니다.", label)
                     try:
                         reauth()
                         return func()
                     except Exception as login_exc:
-                        print(f"[controller] {label} 재로그인 실패: {login_exc}")
+                        logger.error("[controller] %s 재로그인 실패: %s", label, login_exc)
                 break
             except requests.RequestException as exc:
                 last_exc = exc
-                print(f"[controller] {label} 네트워크 오류 (시도 {attempt}/{attempts}): {exc}")
+                logger.warning(
+                    "[controller] %s 네트워크 오류 (시도 %s/%s): %s",
+                    label,
+                    attempt,
+                    attempts,
+                    exc,
+                )
                 if attempt < attempts:
                     time.sleep(delay * attempt)
         raise last_exc
 
     for username, password in zip(usernames, passwords):
-        print(f"Processing for user: {username}")
+        logger.info("Processing for user: %s", username)
 
         globalAuthCtrl = auth.AuthController()
         try:
@@ -234,13 +245,13 @@ def buy():
             try:
                 globalAuthCtrl.login(username, password)
             except Exception as e:
-                print(f"[controller] 로그인 실패 for user {username}: {e}")
+                logger.error("[controller] 로그인 실패 for user %s: %s", username, e)
                 continue
         except Exception:
             try:
                 globalAuthCtrl.login(username, password)
             except Exception as e:
-                print(f"[controller] 로그인 실패 for user {username}: {e}")
+                logger.error("[controller] 로그인 실패 for user %s: %s", username, e)
                 continue
 
         def _safe_balance() -> str:
@@ -291,18 +302,18 @@ def buy():
             )
             send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
         except requests.RequestException as e:
-            print(f"[controller] 연금복권 구매 실패 for user {username}: {e}")
+            logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
             response = {"resultCode": "NETWORK_ERROR", "resultMsg": f"NETWORK_ERROR: {e}"}
             response["balance"] = _safe_balance()
             send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
         except Exception as e:
-            print(f"[controller] 연금복권 구매 실패 for user {username}: {e}")
+            logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
             continue
 
 
 def run():
     if len(sys.argv) < 2:
-        print("Usage: python controller.py [buy|check]")
+        logger.info("Usage: python controller.py [buy|check]")
         return
 
     if sys.argv[1] == "buy":

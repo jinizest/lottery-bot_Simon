@@ -1,7 +1,13 @@
 import html
 import json
+import logging
 import re
 import requests
+
+import common
+
+common.setup_logging()
+logger = logging.getLogger(__name__)
 
 class Notification:
     def send_lotto_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
@@ -159,7 +165,7 @@ class Notification:
 
             self._send_telegram(token, chat_id, message)
         except Exception as e:
-            print(f"[notify] send_win720_winning_message failed: {e}")
+            logger.error("[notify] send_win720_winning_message failed: %s", e)
             return
 
     def _send_telegram(self, token: str, chat_id: str, message: str, escape_message: bool = False) -> None:
@@ -175,4 +181,4 @@ class Notification:
                 response_body = ""
                 if e.response is not None:
                     response_body = f" response={e.response.text}"
-                print(f"[notify] Telegram send failed: {e}{response_body}")
+                logger.error("[notify] Telegram send failed: %s%s", e, response_body)

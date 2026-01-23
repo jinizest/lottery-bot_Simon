@@ -19,6 +19,7 @@ import common
 import re
 import logging
 
+common.setup_logging()
 logger = logging.getLogger(__name__)
 
 class Win720:
