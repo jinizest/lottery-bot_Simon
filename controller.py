@@ -191,11 +191,28 @@ def buy():
         print("[controller] 네트워크 연결 실패로 구매를 중단합니다.")
         return
 
-    def _retry_purchase(label, func, attempts=3, delay=3):
+    def _retry_purchase(label, func, attempts=6, delay=1, reauth=None, reauth_attempts=1):
         last_exc = None
+        reauth_used = 0
         for attempt in range(1, attempts + 1):
             try:
                 return func()
+            except lotto645.NonJsonResponseError as exc:
+                last_exc = exc
+                print(
+                    f"[controller] {label} 응답이 JSON이 아님 "
+                    f"(시도 {attempt}/{attempts}, status={exc.status_code}, "
+                    f"content_type={exc.content_type})."
+                )
+                if reauth and reauth_used < reauth_attempts:
+                    reauth_used += 1
+                    print(f"[controller] {label} 로그인 재시도 후 재구매합니다.")
+                    try:
+                        reauth()
+                        return func()
+                    except Exception as login_exc:
+                        print(f"[controller] {label} 재로그인 실패: {login_exc}")
+                break
             except requests.RequestException as exc:
                 last_exc = exc
                 print(f"[controller] {label} 네트워크 오류 (시도 {attempt}/{attempts}): {exc}")
@@ -237,9 +254,12 @@ def buy():
                 response = _retry_purchase(
                     "로또 자동 구매",
                     lambda: buy_lotto645(globalAuthCtrl, auto_count, "AUTO"),
+                    reauth=lambda: globalAuthCtrl.login(username, password),
                 )
             except requests.RequestException as exc:
                 response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
+            except lotto645.NonJsonResponseError as exc:
+                response = {"result": {"resultMsg": f"NON_JSON_RESPONSE: {exc}"}}
             response['balance'] = _safe_balance()
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
@@ -250,9 +270,12 @@ def buy():
                 response = _retry_purchase(
                     "로또 수동 구매",
                     lambda: buy_lotto645(globalAuthCtrl, manual_count, "MANUAL", manual_numbers=manual_numbers),
+                    reauth=lambda: globalAuthCtrl.login(username, password),
                 )
             except requests.RequestException as exc:
                 response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
+            except lotto645.NonJsonResponseError as exc:
+                response = {"result": {"resultMsg": f"NON_JSON_RESPONSE: {exc}"}}
             response['balance'] = _safe_balance()
             send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
 
