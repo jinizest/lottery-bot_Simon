@@ -606,7 +606,7 @@ class Lotto645:
             return None
         upper = text.upper()
 
-        auto_values = {"0", "A", "AUTO", "Y", "YES", "TRUE", "T", "자동"}
+        auto_values = {"0", "3", "A", "AUTO", "Y", "YES", "TRUE", "T", "자동"}
         manual_values = {"1", "M", "MANUAL", "N", "NO", "FALSE", "F", "수동"}
         semi_values = {"2", "S", "SEMI", "SEMI-AUTO", "SEMI AUTO", "SA", "SM", "반자동"}
 
