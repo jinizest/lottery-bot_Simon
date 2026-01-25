@@ -468,6 +468,7 @@ class Lotto645:
             "genTypeCD",
             "genTyCd",
             "gnType",
+            "status",
             "autoYn",
             "auto_yn",
             "auto",
@@ -487,6 +488,16 @@ class Lotto645:
                     method = self._normalize_method_value(source.get(key))
                     if method:
                         return method
+
+        keyword_candidates = ("auto", "manual", "gen", "buy", "sel", "type", "yn", "status")
+        for source in (game, ticket):
+            for key, value in source.items():
+                lower_key = str(key).lower()
+                if any(keyword in lower_key for keyword in keyword_candidates):
+                    method = self._normalize_method_value(value)
+                    if method:
+                        return method
+
         return "알수없음"
 
     def _normalize_method_value(self, value: object) -> Optional[str]:
@@ -506,6 +517,13 @@ class Lotto645:
         if upper in manual_values:
             return "수동"
         if upper in semi_values:
+            return "반자동"
+
+        if "AUTO" in upper or "자동" in text:
+            return "자동"
+        if "MANUAL" in upper or "수동" in text:
+            return "수동"
+        if "SEMI" in upper or "반자동" in text:
             return "반자동"
         return None
     
