@@ -428,7 +428,7 @@ class Lotto645:
                         rank = game.get("rank", "0")
                         status = "0등" if rank == "0" else f"{rank}등"
 
-                        method = self._determine_method(game, ticket)
+                        method = self._determine_method(game, ticket, i)
 
                         nums = game.get("num", [])
                         formatted_nums = []
@@ -459,7 +459,25 @@ class Lotto645:
 
         return result_data
 
-    def _determine_method(self, game: dict, ticket: dict) -> str:
+    def _determine_method(self, game: dict, ticket: dict, game_index: Optional[int] = None) -> str:
+        method = self._extract_method_from_mapping(game)
+        if method:
+            return method
+
+        method = self._extract_method_from_mapping(ticket)
+        if method:
+            return method
+
+        method = self._extract_method_from_ticket_games(ticket, game_index)
+        if method:
+            return method
+
+        return "알수없음"
+
+    def _extract_method_from_mapping(self, source: dict) -> Optional[str]:
+        if not isinstance(source, dict):
+            return None
+
         candidate_keys = (
             "genType",
             "gen_type",
@@ -482,23 +500,82 @@ class Lotto645:
             "sel_type",
         )
 
-        for source in (game, ticket):
-            for key in candidate_keys:
-                if key in source:
-                    method = self._normalize_method_value(source.get(key))
-                    if method:
-                        return method
+        for key in candidate_keys:
+            if key in source:
+                method = self._normalize_method_value(source.get(key))
+                if method:
+                    return method
 
         keyword_candidates = ("auto", "manual", "gen", "buy", "sel", "type", "yn", "status")
-        for source in (game, ticket):
-            for key, value in source.items():
-                lower_key = str(key).lower()
-                if any(keyword in lower_key for keyword in keyword_candidates):
-                    method = self._normalize_method_value(value)
+        for key, value in source.items():
+            lower_key = str(key).lower()
+            if any(keyword in lower_key for keyword in keyword_candidates):
+                method = self._normalize_method_value(value)
+                if method:
+                    return method
+
+        return None
+
+    def _extract_method_from_ticket_games(self, ticket: dict, game_index: Optional[int]) -> Optional[str]:
+        if not isinstance(ticket, dict):
+            return None
+
+        game_sources = (
+            "game",
+            "games",
+            "gameList",
+            "game_list",
+            "gameParam",
+            "game_param",
+            "param",
+        )
+
+        for key in game_sources:
+            if key not in ticket:
+                continue
+            raw_value = ticket.get(key)
+            parsed_value = self._coerce_to_json(raw_value)
+            if isinstance(parsed_value, list):
+                if game_index is not None and 0 <= game_index < len(parsed_value):
+                    method = self._normalize_method_value(parsed_value[game_index])
                     if method:
                         return method
+                    if isinstance(parsed_value[game_index], dict):
+                        method = self._extract_method_from_mapping(parsed_value[game_index])
+                        if method:
+                            return method
+                for entry in parsed_value:
+                    if isinstance(entry, dict):
+                        method = self._extract_method_from_mapping(entry)
+                        if method:
+                            return method
+                    else:
+                        method = self._normalize_method_value(entry)
+                        if method:
+                            return method
+            elif isinstance(parsed_value, dict):
+                method = self._extract_method_from_mapping(parsed_value)
+                if method:
+                    return method
+            else:
+                method = self._normalize_method_value(parsed_value)
+                if method:
+                    return method
 
-        return "알수없음"
+        return None
+
+    def _coerce_to_json(self, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if not text:
+            return value
+        if not (text.startswith("{") or text.startswith("[")):
+            return value
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return value
 
     def _normalize_method_value(self, value: object) -> Optional[str]:
         if value is None:
