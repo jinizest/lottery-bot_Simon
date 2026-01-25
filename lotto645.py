@@ -356,30 +356,50 @@ class Lotto645:
                 data = {}
 
             if not data.get("list"):
-                 return {"data": "no winning data (empty list or API fail)"}
+                return {"data": "no winning data (empty list or API fail)"}
 
+            latest_round = None
+            latest_round_items = []
             for item in data["list"]:
-                purchased_date = item.get("eltOrdrDt", "-")
-                round_no = item.get("ltEpsdView", "")
-                money = item.get("ltWnAmt", "-")
-                
-                if "회" in round_no:
-                    round_no = round_no.replace("회", "")
-                
-                if money == "0" or money == 0:
-                     money = "0 원"
-                else:
-                    money = f"{int(money):,} 원"
+                try:
+                    round_value = int(item.get("ltEpsd"))
+                except (TypeError, ValueError):
+                    continue
+                if latest_round is None or round_value > latest_round:
+                    latest_round = round_value
+                    latest_round_items = [item]
+                elif round_value == latest_round:
+                    latest_round_items.append(item)
 
-                result_data = {
-                    "round": round_no,
-                    "money": money,
-                    "purchased_date": purchased_date,
-                    "winning_date": item.get("epsdRflDt", "-"),
-                    "lotto_details": [] 
-                }
-                
-                detail_url = "https://www.dhlottery.co.kr/mypage/lotto645TicketDetail.do"
+            if not latest_round_items:
+                return {"data": "no winning data (latest round missing)"}
+
+            purchased_dates = [item.get("eltOrdrDt") for item in latest_round_items if item.get("eltOrdrDt")]
+            purchased_date = max(purchased_dates) if purchased_dates else "-"
+            winning_date = latest_round_items[0].get("epsdRflDt", "-")
+
+            total_prize = 0
+            for item in latest_round_items:
+                amount = item.get("ltWnAmt", 0)
+                try:
+                    total_prize += int(amount)
+                except (TypeError, ValueError):
+                    continue
+
+            money = "0 원" if total_prize == 0 else f"{total_prize:,} 원"
+
+            result_data = {
+                "round": str(latest_round),
+                "money": money,
+                "purchased_date": purchased_date,
+                "winning_date": winning_date,
+                "lotto_details": []
+            }
+
+            detail_url = "https://www.dhlottery.co.kr/mypage/lotto645TicketDetail.do"
+            lotto_details = []
+
+            for ticket_index, item in enumerate(latest_round_items, start=1):
                 detail_params = {
                     "ltGdsCd": item.get("ltGdsCd"),
                     "ltEpsd": item.get("ltEpsd"),
@@ -388,27 +408,26 @@ class Lotto645:
                     "srchStrDt": params["srchStrDt"],
                     "srchEndDt": params["srchEndDt"]
                 }
-                
+
                 try:
                     res_detail = self.http_client.get(detail_url, params=detail_params, headers=headers)
                     detail_data = res_detail.json()
                     detail_data = detail_data.get("data", detail_data)
-                    
+
                     ticket = detail_data.get("ticket", {})
                     if not ticket and "data" in detail_data:
-                         ticket = detail_data["data"].get("ticket", {})
-                         
+                        ticket = detail_data["data"].get("ticket", {})
+
                     game_dtl = ticket.get("game_dtl", [])
                     win_num = ticket.get("win_num", [])
-                    
-                    lotto_details = []
-                    
+
                     for i, game in enumerate(game_dtl):
-                        label = common.SLOTS[i] if i < len(common.SLOTS) else "?"
-                        
+                        slot_label = common.SLOTS[i] if i < len(common.SLOTS) else "?"
+                        label = f"{ticket_index}-{slot_label}"
+
                         rank = game.get("rank", "0")
                         status = "낙첨" if rank == "0" else f"{rank}등"
-                        
+
                         nums = game.get("num", [])
                         formatted_nums = []
                         for num in nums:
@@ -416,20 +435,18 @@ class Lotto645:
                                 formatted_nums.append(f"✨{num}")
                             else:
                                 formatted_nums.append(str(num))
-                        
+
                         lotto_details.append({
                             "label": label,
                             "status": status,
                             "result": formatted_nums
                         })
-                    
-                    result_data["lotto_details"] = lotto_details
 
                 except (requests.RequestException, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
                     logger.error(f"[Error] Detail parse error (url={detail_url}, params={detail_params}): {e}")
-                
-                break
- 
+
+            result_data["lotto_details"] = lotto_details
+
                             
         except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
             logger.error(f"[Error] Lotto check error: {e}")
