@@ -428,23 +428,7 @@ class Lotto645:
                         rank = game.get("rank", "0")
                         status = "0등" if rank == "0" else f"{rank}등"
 
-                        gen_type = (
-                            game.get("genType")
-                            or game.get("gen_type")
-                            or game.get("gen_type_cd")
-                            or game.get("gnType")
-                        )
-                        auto_flag = (
-                            game.get("autoYn")
-                            or game.get("auto_yn")
-                            or game.get("auto")
-                        )
-                        if str(gen_type).upper() in {"0", "AUTO", "A"} or str(auto_flag).upper() == "Y":
-                            method = "자동"
-                        elif str(gen_type).upper() in {"1", "MANUAL", "M"} or str(auto_flag).upper() == "N":
-                            method = "수동"
-                        else:
-                            method = "알수없음"
+                        method = self._determine_method(game, ticket)
 
                         nums = game.get("num", [])
                         formatted_nums = []
@@ -474,6 +458,56 @@ class Lotto645:
             raise
 
         return result_data
+
+    def _determine_method(self, game: dict, ticket: dict) -> str:
+        candidate_keys = (
+            "genType",
+            "gen_type",
+            "gen_type_cd",
+            "genTypeCd",
+            "genTypeCD",
+            "genTyCd",
+            "gnType",
+            "autoYn",
+            "auto_yn",
+            "auto",
+            "autoType",
+            "auto_type",
+            "buyType",
+            "buy_type",
+            "buyTypeCd",
+            "buy_type_cd",
+            "selType",
+            "sel_type",
+        )
+
+        for source in (game, ticket):
+            for key in candidate_keys:
+                if key in source:
+                    method = self._normalize_method_value(source.get(key))
+                    if method:
+                        return method
+        return "알수없음"
+
+    def _normalize_method_value(self, value: object) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        upper = text.upper()
+
+        auto_values = {"0", "A", "AUTO", "Y", "YES", "TRUE", "T", "자동"}
+        manual_values = {"1", "M", "MANUAL", "N", "NO", "FALSE", "F", "수동"}
+        semi_values = {"2", "S", "SEMI", "SEMI-AUTO", "SEMI AUTO", "SA", "SM", "반자동"}
+
+        if upper in auto_values:
+            return "자동"
+        if upper in manual_values:
+            return "수동"
+        if upper in semi_values:
+            return "반자동"
+        return None
     
 
     def _show_result(self, body: dict) -> None:
