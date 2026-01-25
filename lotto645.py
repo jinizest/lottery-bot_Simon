@@ -413,6 +413,11 @@ class Lotto645:
                     res_detail = self.http_client.get(detail_url, params=detail_params, headers=headers)
                     detail_data = res_detail.json()
                     detail_data = detail_data.get("data", detail_data)
+                    logger.info(
+                        "[lotto645] Detail response (ticket=%s): %s",
+                        ticket_index,
+                        json.dumps(detail_data, ensure_ascii=False),
+                    )
 
                     ticket = detail_data.get("ticket", {})
                     if not ticket and "data" in detail_data:
