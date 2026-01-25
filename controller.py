@@ -45,6 +45,13 @@ def check_winning_win720(authCtrl: auth.AuthController) -> dict:
 
 def send_message(mode: int, lottery_type: int, response: dict, token: str, chat_id: str, userid: str):
     notify = notification.Notification()
+    logger.info(
+        "[controller] send_message response for user=%s mode=%s lottery_type=%s: %s",
+        userid,
+        mode,
+        lottery_type,
+        response,
+    )
 
     if mode == 0:
         if lottery_type == 0:
