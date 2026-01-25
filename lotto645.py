@@ -426,7 +426,25 @@ class Lotto645:
                         label = f"{ticket_index}-{slot_label}"
 
                         rank = game.get("rank", "0")
-                        status = "낙첨" if rank == "0" else f"{rank}등"
+                        status = "0등" if rank == "0" else f"{rank}등"
+
+                        gen_type = (
+                            game.get("genType")
+                            or game.get("gen_type")
+                            or game.get("gen_type_cd")
+                            or game.get("gnType")
+                        )
+                        auto_flag = (
+                            game.get("autoYn")
+                            or game.get("auto_yn")
+                            or game.get("auto")
+                        )
+                        if str(gen_type).upper() in {"0", "AUTO", "A"} or str(auto_flag).upper() == "Y":
+                            method = "자동"
+                        elif str(gen_type).upper() in {"1", "MANUAL", "M"} or str(auto_flag).upper() == "N":
+                            method = "수동"
+                        else:
+                            method = "알수없음"
 
                         nums = game.get("num", [])
                         formatted_nums = []
@@ -439,6 +457,7 @@ class Lotto645:
                         lotto_details.append({
                             "label": label,
                             "status": status,
+                            "method": method,
                             "result": formatted_nums
                         })
 

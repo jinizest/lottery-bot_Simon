@@ -120,13 +120,20 @@ class Notification:
             round_val = winning.get("round", "-")
             money = winning.get("money", "-")
 
-            max_label_status_length = max(
-                len(f"{line['label']} {line['status']}") for line in lotto_details
-            )
+            formatted_prefixes = []
+            for line in lotto_details:
+                label = line.get("label", "?")
+                slot = label.split("-", 1)[-1] if "-" in label else label
+                method = line.get("method", "알수없음")
+                status = line.get("status", "-")
+                prefix = f"{round_val} {slot} {method} ({status})"
+                formatted_prefixes.append(prefix)
+
+            max_prefix_length = max(len(prefix) for prefix in formatted_prefixes)
 
             formatted_lines = []
-            for line in lotto_details:
-                line_label_status = f"{line['label']} {line['status']}".ljust(max_label_status_length)
+            for line, prefix in zip(lotto_details, formatted_prefixes):
+                line_prefix = prefix.ljust(max_prefix_length)
                 line_result = line["result"]
 
                 formatted_nums = []
@@ -136,18 +143,14 @@ class Notification:
                     if '✨' in num:
                         formatted_nums.append(f"[{formatted_num}]")
                     else:
-                        formatted_nums.append(formatted_num)
+                        formatted_nums.append(f" {formatted_num} ")
 
-                # 더 좁은 폭으로 정렬해 한 줄 내에 표시되도록 한다
-                COL_WIDTH = 3
-                formatted_nums = [f"{num:>{COL_WIDTH}}" for num in formatted_nums]
-
-                formatted_line = f"{line_label_status} " + " ".join(formatted_nums)
+                formatted_line = f"{line_prefix} " + " ".join(formatted_nums)
                 formatted_lines.append(formatted_line)
 
             formatted_results = "\n".join(formatted_lines)
 
-            if money != "-":
+            if money != "-" and money != "0 원":
                 winning_message = f"{userid}님, 로또 *{round_val}회* - *{money}* 당첨 되었습니다 🎉"
             else:
                 winning_message = f"{userid}님, 로또 *{round_val}회* - 다음 기회에... 🫠"
