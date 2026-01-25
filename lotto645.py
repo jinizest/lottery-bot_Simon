@@ -503,6 +503,22 @@ class Lotto645:
     def _normalize_method_value(self, value: object) -> Optional[str]:
         if value is None:
             return None
+        if isinstance(value, dict):
+            for inner_value in value.values():
+                method = self._normalize_method_value(inner_value)
+                if method:
+                    return method
+            for inner_key in value.keys():
+                method = self._normalize_method_value(inner_key)
+                if method:
+                    return method
+            return None
+        if isinstance(value, (list, tuple, set)):
+            for inner_value in value:
+                method = self._normalize_method_value(inner_value)
+                if method:
+                    return method
+            return None
         text = str(value).strip()
         if not text:
             return None
