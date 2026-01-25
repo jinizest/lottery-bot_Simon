@@ -1,5 +1,6 @@
 import datetime
 import json
+import re
 import time
 import requests
 
@@ -173,21 +174,23 @@ class Lotto645:
         soup = BS(html, "html5lib")
         
         try:
-            draw_date_el = soup.find("input", id="ROUND_DRAW_DATE")
-            tlmt_date_el = soup.find("input", id="WAMT_PAY_TLMT_END_DT")
-            
-            if draw_date_el and tlmt_date_el:
-                draw_date = draw_date_el.get('value')
-                tlmt_date = tlmt_date_el.get('value')
-            else:
-                raise ValueError("Date inputs not found")
+            draw_date = self._extract_date_value(
+                soup,
+                html,
+                key="ROUND_DRAW_DATE",
+            )
+            tlmt_date = self._extract_date_value(
+                soup,
+                html,
+                key="WAMT_PAY_TLMT_END_DT",
+            )
         except (ValueError, AttributeError, TypeError) as e:
             logger.error(f"[Error] Date extraction failed: {e}")
             today = datetime.datetime.today()
             days_ahead = (5 - today.weekday()) % 7
             next_saturday = today + datetime.timedelta(days=days_ahead)
             draw_date = next_saturday.strftime("%Y-%m-%d")
-            
+
             limit_date = next_saturday + datetime.timedelta(days=366)
             tlmt_date = limit_date.strftime("%Y-%m-%d")
 
@@ -199,6 +202,26 @@ class Lotto645:
             current_round = self._get_round()
 
         return [direct, draw_date, tlmt_date, current_round]
+
+    def _extract_date_value(self, soup: BS, html: str, key: str) -> str:
+        candidates = [
+            soup.find("input", id=key),
+            soup.find("input", attrs={"name": key}),
+            soup.select_one(f"input#{key}"),
+            soup.select_one(f"input[name='{key}']"),
+        ]
+        for candidate in candidates:
+            if candidate:
+                value = candidate.get("value")
+                if value:
+                    return value
+
+        pattern = re.compile(rf"{re.escape(key)}\\s*[:=]\\s*['\"]([^'\"]+)['\"]")
+        match = pattern.search(html)
+        if match:
+            return match.group(1)
+
+        raise ValueError(f"{key} not found in HTML")
 
     def _get_round(self) -> str:
         try:
