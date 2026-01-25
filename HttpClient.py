@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 class HttpClient:
     def __init__(
         self,
-        timeout: int = 20,
-        max_retries: int = 3,
+        timeout: int = 10,
+        max_retries: int = 2,
         connect_timeout: int = None,
         read_timeout: int = None,
         request_delay: float = None,
     ):
         self.session = requests.Session()
-        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "20"))
+        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "5"))
         read = read_timeout or int(os.getenv("READ_TIMEOUT", str(timeout)))
         self.timeout = (connect, read)
         self.request_delay = request_delay if request_delay is not None else float(
