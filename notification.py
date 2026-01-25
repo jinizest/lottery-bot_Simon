@@ -129,11 +129,8 @@ class Notification:
                 prefix = f"{round_val} {slot} {method} ({status})"
                 formatted_prefixes.append(prefix)
 
-            max_prefix_length = max(len(prefix) for prefix in formatted_prefixes)
-
             formatted_lines = []
             for line, prefix in zip(lotto_details, formatted_prefixes):
-                line_prefix = prefix.ljust(max_prefix_length)
                 line_result = line["result"]
 
                 formatted_nums = []
@@ -143,9 +140,9 @@ class Notification:
                     if '✨' in num:
                         formatted_nums.append(f"[{formatted_num}]")
                     else:
-                        formatted_nums.append(f" {formatted_num} ")
+                        formatted_nums.append(formatted_num)
 
-                formatted_line = f"{line_prefix} " + " ".join(formatted_nums)
+                formatted_line = f"{prefix} " + " ".join(formatted_nums)
                 formatted_lines.append(formatted_line)
 
             formatted_results = "\n".join(formatted_lines)
