@@ -219,10 +219,11 @@ def buy():
                     logger.info("[controller] %s 로그인 재시도 후 재구매합니다.", label)
                     try:
                         reauth()
-                        return func()
                     except Exception as login_exc:
                         logger.error("[controller] %s 재로그인 실패: %s", label, login_exc)
-                break
+                if attempt < attempts:
+                    time.sleep(delay * attempt)
+                    continue
             except requests.RequestException as exc:
                 last_exc = exc
                 logger.warning(

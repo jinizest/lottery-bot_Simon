@@ -259,6 +259,14 @@ class Lotto645:
 
         headers["Content-Type"]  = "application/x-www-form-urlencoded; charset=UTF-8"
 
+        def _looks_like_html(text: str) -> bool:
+            if not text:
+                return False
+            normalized = text.lstrip("\ufeff").strip().lower()
+            if normalized.startswith("<"):
+                return True
+            return "<html" in normalized or "<!doctype" in normalized
+
         attempts = 5
         for attempt in range(1, attempts + 1):
             try:
@@ -271,13 +279,13 @@ class Lotto645:
                     res.encoding = 'euc-kr'
 
                 content_type = res.headers.get("Content-Type", "")
-                body_text = res.text.strip()
-                if "text/html" in content_type or body_text.startswith("<"):
+                body_text = res.text
+                if "text/html" in content_type or _looks_like_html(body_text):
                     raise NonJsonResponseError(
                         "HTML response received from execBuy.do",
                         res.status_code,
                         content_type,
-                        body_text[:200],
+                        body_text.strip()[:200],
                     )
 
                 try:
@@ -286,6 +294,14 @@ class Lotto645:
                     res.encoding = 'euc-kr'
                     return json.loads(res.text)
                 except json.JSONDecodeError:
+                    if _looks_like_html(res.text):
+                        body_preview = res.text.strip()[:200]
+                        raise NonJsonResponseError(
+                            "HTML response received from execBuy.do",
+                            res.status_code,
+                            res.headers.get("Content-Type", ""),
+                            body_preview,
+                        )
                     if attempt == attempts:
                         body_preview = res.text.strip()[:200]
                         raise NonJsonResponseError(
