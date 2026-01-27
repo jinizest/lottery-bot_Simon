@@ -140,7 +140,7 @@ class Lotto645:
                 [
                     {
                         "genType": "1",
-                        "arrGameChoiceNum": numbers,
+                        "arrGameChoiceNum": ",".join(numbers),
                         "alpabet": slot,
                     }
                     for slot, numbers in zip(common.SLOTS[:cnt], normalized_numbers)
