@@ -221,8 +221,11 @@ class AuthController:
         try:
             res = self.http_client.get("https://dhlottery.co.kr/mypage/home")
         except requests.RequestException as exc:
-            logger.warning("[auth] Session validation request failed: %s", exc)
-            return False
+            logger.warning(
+                "[auth] Session validation request failed (treating as unknown): %s",
+                exc,
+            )
+            return True
 
         if "user.do?method=login" in res.url:
             logger.info("[auth] Session validation detected login redirect.")
