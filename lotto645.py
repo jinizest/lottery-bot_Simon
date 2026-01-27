@@ -76,6 +76,8 @@ class Lotto645:
             else self._generate_body_for_manual(cnt, requirements, manual_numbers)
         )
 
+        auth_ctrl.ensure_session()
+
         body = self._try_buying(headers, data)
 
         self._show_result(body)
@@ -281,6 +283,13 @@ class Lotto645:
                 content_type = res.headers.get("Content-Type", "")
                 body_text = res.text
                 if "text/html" in content_type or _looks_like_html(body_text):
+                    logger.warning(
+                        "[lotto645] HTML response received from execBuy.do "
+                        "status=%s content_type=%s preview=%s",
+                        res.status_code,
+                        content_type,
+                        body_text.strip()[:1000],
+                    )
                     raise NonJsonResponseError(
                         "HTML response received from execBuy.do",
                         res.status_code,
