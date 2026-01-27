@@ -56,7 +56,7 @@ class Lotto645:
         self.http_client = HttpClientSingleton.get_instance()
 
     def buy_lotto645(
-        self, 
+        self,
         auth_ctrl: auth.AuthController, 
         cnt: int, 
         mode: Lotto645Mode,
@@ -75,6 +75,14 @@ class Lotto645:
             if mode == Lotto645Mode.AUTO
             else self._generate_body_for_manual(cnt, requirements, manual_numbers)
         )
+
+        logger.info(
+            "[lotto645] Purchase payload mode=%s data=%s",
+            "AUTO" if mode == Lotto645Mode.AUTO else "MANUAL",
+            data,
+        )
+
+        auth_ctrl.ensure_session()
 
         body = self._try_buying(headers, data)
 
@@ -116,7 +124,12 @@ class Lotto645:
         for entry in manual_numbers:
             if len(entry) != 6:
                 raise ValueError("Each manual entry must contain 6 numbers.")
-            normalized_entry = [f"{int(num):02d}" for num in entry]
+            parsed_numbers = [int(num) for num in entry]
+            if any(num < 1 or num > 45 for num in parsed_numbers):
+                raise ValueError("Each manual entry must be between 1 and 45.")
+            if len(set(parsed_numbers)) != 6:
+                raise ValueError("Each manual entry must be unique.")
+            normalized_entry = [f"{num:02d}" for num in parsed_numbers]
             normalized_numbers.append(normalized_entry)
 
         return {
@@ -281,6 +294,13 @@ class Lotto645:
                 content_type = res.headers.get("Content-Type", "")
                 body_text = res.text
                 if "text/html" in content_type or _looks_like_html(body_text):
+                    logger.warning(
+                        "[lotto645] HTML response received from execBuy.do "
+                        "status=%s content_type=%s body=%s",
+                        res.status_code,
+                        content_type,
+                        body_text.strip(),
+                    )
                     raise NonJsonResponseError(
                         "HTML response received from execBuy.do",
                         res.status_code,
