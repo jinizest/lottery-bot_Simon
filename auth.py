@@ -1,5 +1,6 @@
 import copy
 import datetime
+import logging
 import requests
 import json
 import base64
@@ -9,6 +10,11 @@ from Crypto.Cipher import PKCS1_v1_5
 from HttpClient import HttpClientSingleton
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+logger = logging.getLogger(__name__)
+
+
+class SessionValidationError(RuntimeError):
+    pass
 
 class AuthController:
     _REQ_HEADERS = {
@@ -210,3 +216,29 @@ class AuthController:
 
         except Exception as e:
              return f"0 (System Error: {str(e)})"
+
+    def validate_session(self) -> bool:
+        try:
+            res = self.http_client.get("https://dhlottery.co.kr/mypage/home")
+        except requests.RequestException as exc:
+            logger.warning("[auth] Session validation request failed: %s", exc)
+            return False
+
+        if "user.do?method=login" in res.url:
+            logger.info("[auth] Session validation detected login redirect.")
+            return False
+
+        text = res.text.lower()
+        if "로그인" in res.text and "로그아웃" not in res.text:
+            logger.info("[auth] Session validation detected login page content.")
+            return False
+
+        if "login" in text and "logout" not in text and "securitylogincheck" not in text:
+            logger.info("[auth] Session validation detected login page keywords.")
+            return False
+
+        return True
+
+    def ensure_session(self) -> None:
+        if not self.validate_session():
+            raise SessionValidationError("Session validation failed.")
