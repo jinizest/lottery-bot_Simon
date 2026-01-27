@@ -1,6 +1,8 @@
 import copy
 import datetime
 import logging
+import os
+import time
 import requests
 import json
 import base64
@@ -173,6 +175,39 @@ class AuthController:
             
     def get_user_balance(self) -> str:
         try:
+             connect_timeout = int(os.getenv("CONNECT_TIMEOUT", "5"))
+             read_timeout = int(os.getenv("BALANCE_READ_TIMEOUT", "10"))
+             timeout = (connect_timeout, read_timeout)
+             max_attempts = 3
+
+             def _get_with_retry(url: str, headers: dict = None) -> requests.Response:
+                 last_exc = None
+                 for attempt in range(1, max_attempts + 1):
+                     try:
+                         logger.info(
+                             "[auth] Balance request url=%s attempt=%s/%s",
+                             url,
+                             attempt,
+                             max_attempts,
+                         )
+                         return self.http_client.session.get(
+                             url,
+                             headers=headers,
+                             timeout=timeout,
+                         )
+                     except requests.RequestException as exc:
+                         last_exc = exc
+                         logger.warning(
+                             "[auth] Balance request failed url=%s attempt=%s/%s error=%s",
+                             url,
+                             attempt,
+                             max_attempts,
+                             exc,
+                         )
+                         if attempt < max_attempts:
+                             time.sleep(0.5 * attempt)
+                 raise last_exc
+
              try:
                  self.http_client.get("https://dhlottery.co.kr/mypage/home")
              except requests.RequestException:
@@ -194,7 +229,7 @@ class AuthController:
                 "Sec-Fetch-Dest": "empty"
              })
              
-             res = self.http_client.get(url, headers=headers)
+             res = _get_with_retry(url, headers=headers)
              
              txt = res.text.strip()
              if txt.startswith("<"):
