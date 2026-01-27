@@ -1,5 +1,8 @@
 import copy
 import datetime
+import logging
+import os
+import time
 import requests
 import json
 import base64
@@ -9,6 +12,11 @@ from Crypto.Cipher import PKCS1_v1_5
 from HttpClient import HttpClientSingleton
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+logger = logging.getLogger(__name__)
+
+
+class SessionValidationError(RuntimeError):
+    pass
 
 class AuthController:
     _REQ_HEADERS = {
@@ -167,6 +175,39 @@ class AuthController:
             
     def get_user_balance(self) -> str:
         try:
+             connect_timeout = int(os.getenv("CONNECT_TIMEOUT", "5"))
+             read_timeout = int(os.getenv("BALANCE_READ_TIMEOUT", "10"))
+             timeout = (connect_timeout, read_timeout)
+             max_attempts = 3
+
+             def _get_with_retry(url: str, headers: dict = None) -> requests.Response:
+                 last_exc = None
+                 for attempt in range(1, max_attempts + 1):
+                     try:
+                         logger.info(
+                             "[auth] Balance request url=%s attempt=%s/%s",
+                             url,
+                             attempt,
+                             max_attempts,
+                         )
+                         return self.http_client.session.get(
+                             url,
+                             headers=headers,
+                             timeout=timeout,
+                         )
+                     except requests.RequestException as exc:
+                         last_exc = exc
+                         logger.warning(
+                             "[auth] Balance request failed url=%s attempt=%s/%s error=%s",
+                             url,
+                             attempt,
+                             max_attempts,
+                             exc,
+                         )
+                         if attempt < max_attempts:
+                             time.sleep(0.5 * attempt)
+                 raise last_exc
+
              try:
                  self.http_client.get("https://dhlottery.co.kr/mypage/home")
              except requests.RequestException:
@@ -188,7 +229,7 @@ class AuthController:
                 "Sec-Fetch-Dest": "empty"
              })
              
-             res = self.http_client.get(url, headers=headers)
+             res = _get_with_retry(url, headers=headers)
              
              txt = res.text.strip()
              if txt.startswith("<"):
@@ -210,3 +251,32 @@ class AuthController:
 
         except Exception as e:
              return f"0 (System Error: {str(e)})"
+
+    def validate_session(self) -> bool:
+        try:
+            res = self.http_client.get("https://dhlottery.co.kr/mypage/home")
+        except requests.RequestException as exc:
+            logger.warning(
+                "[auth] Session validation request failed (treating as unknown): %s",
+                exc,
+            )
+            return True
+
+        if "user.do?method=login" in res.url:
+            logger.info("[auth] Session validation detected login redirect.")
+            return False
+
+        text = res.text.lower()
+        if "로그인" in res.text and "로그아웃" not in res.text:
+            logger.info("[auth] Session validation detected login page content.")
+            return False
+
+        if "login" in text and "logout" not in text and "securitylogincheck" not in text:
+            logger.info("[auth] Session validation detected login page keywords.")
+            return False
+
+        return True
+
+    def ensure_session(self) -> None:
+        if not self.validate_session():
+            raise SessionValidationError("Session validation failed.")

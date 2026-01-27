@@ -201,12 +201,31 @@ def buy():
         logger.error("[controller] 네트워크 연결 실패로 구매를 중단합니다.")
         return
 
-    def _retry_purchase(label, func, attempts=6, delay=1, reauth=None, reauth_attempts=1):
+    def _retry_purchase(label, func, attempts=6, delay=1, reauth=None, reauth_attempts=2):
         last_exc = None
         reauth_used = 0
         for attempt in range(1, attempts + 1):
             try:
                 return func()
+            except auth.SessionValidationError as exc:
+                last_exc = exc
+                logger.warning(
+                    "[controller] %s 세션 재검증 실패 (시도 %s/%s): %s",
+                    label,
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                if reauth and reauth_used < reauth_attempts:
+                    reauth_used += 1
+                    logger.info("[controller] %s 로그인 재시도 후 재구매합니다.", label)
+                    try:
+                        reauth()
+                    except Exception as login_exc:
+                        logger.error("[controller] %s 재로그인 실패: %s", label, login_exc)
+                if attempt < attempts:
+                    time.sleep(delay * attempt)
+                    continue
             except lotto645.NonJsonResponseError as exc:
                 last_exc = exc
                 logger.warning(
