@@ -41,6 +41,7 @@ class AuthController:
 
     def __init__(self):
         self.http_client = HttpClientSingleton.get_instance()
+        self._last_balance = None
 
     def login(self, user_id: str, password: str):
         assert isinstance(user_id, str)
@@ -175,26 +176,38 @@ class AuthController:
             
     def get_user_balance(self) -> str:
         try:
-             connect_timeout = int(os.getenv("CONNECT_TIMEOUT", "5"))
-             read_timeout = int(os.getenv("BALANCE_READ_TIMEOUT", "10"))
+             connect_timeout = int(os.getenv("BALANCE_CONNECT_TIMEOUT", "7"))
+             read_timeout = int(os.getenv("BALANCE_READ_TIMEOUT", "15"))
              timeout = (connect_timeout, read_timeout)
-             max_attempts = 3
+             max_attempts = int(os.getenv("BALANCE_MAX_ATTEMPTS", "6"))
 
-             def _get_with_retry(url: str, headers: dict = None) -> requests.Response:
+             def _refresh_mypage():
+                 try:
+                     self.http_client.get("https://dhlottery.co.kr/mypage/home")
+                 except requests.RequestException as exc:
+                     logger.warning("[auth] Balance preflight failed: %s", exc)
+
+             def _get_with_retry(headers: dict = None) -> requests.Response:
                  last_exc = None
                  for attempt in range(1, max_attempts + 1):
+                     timestamp = int(datetime.datetime.now().timestamp() * 1000)
+                     url = f"https://dhlottery.co.kr/mypage/selectUserMndp.do?_={timestamp}"
                      try:
+                         if attempt > 1:
+                             _refresh_mypage()
                          logger.info(
                              "[auth] Balance request url=%s attempt=%s/%s",
                              url,
                              attempt,
                              max_attempts,
                          )
-                         return self.http_client.session.get(
+                         res = self.http_client.session.get(
                              url,
                              headers=headers,
                              timeout=timeout,
                          )
+                         res.raise_for_status()
+                         return res
                      except requests.RequestException as exc:
                          last_exc = exc
                          logger.warning(
@@ -205,17 +218,11 @@ class AuthController:
                              exc,
                          )
                          if attempt < max_attempts:
-                             time.sleep(0.5 * attempt)
+                             time.sleep(0.75 * attempt)
                  raise last_exc
 
-             try:
-                 self.http_client.get("https://dhlottery.co.kr/mypage/home")
-             except requests.RequestException:
-                 pass
+             _refresh_mypage()
 
-             timestamp = int(datetime.datetime.now().timestamp() * 1000)
-             url = f"https://dhlottery.co.kr/mypage/selectUserMndp.do?_={timestamp}"
-             
              headers = copy.deepcopy(self._REQ_HEADERS)
              headers.update({
                 "Referer": "https://dhlottery.co.kr/mypage/home",
@@ -229,7 +236,7 @@ class AuthController:
                 "Sec-Fetch-Dest": "empty"
              })
              
-             res = _get_with_retry(url, headers=headers)
+             res = _get_with_retry(headers=headers)
              
              txt = res.text.strip()
              if txt.startswith("<"):
@@ -245,12 +252,18 @@ class AuthController:
                  
              if 'totalAmt' in data:
                  val = str(data['totalAmt']).replace(',', '')
-                 return f"{int(val):,}원"
+                 balance = f"{int(val):,}원"
+                 self._last_balance = balance
+                 return balance
              
              return "0원"
 
         except Exception as e:
-             return f"0 (System Error: {str(e)})"
+             if self._last_balance:
+                 logger.warning("[auth] Balance fallback to cached value due to error: %s", e)
+                 return self._last_balance
+             logger.error("[auth] Balance request ultimately failed: %s", e)
+             return "확인 불가"
 
     def validate_session(self) -> bool:
         try:
