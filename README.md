@@ -13,7 +13,3 @@
 
 # Reference 
 - https://github.com/roeniss/dhlottery-api
-
-
-## 운영 이슈 가이드
-- [KTX 자동결제 장애 점검 가이드](./KTX_PAYMENT_TROUBLESHOOTING.md)
