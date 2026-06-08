@@ -295,6 +295,8 @@ def buy():
             except Exception as exc:
                 return f"조회 실패: {exc}"
 
+        purchase_results = []
+
         if auto_count > 0:
             try:
                 response = _retry_purchase(
@@ -306,8 +308,11 @@ def buy():
                 response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
             except lotto645.NonJsonResponseError as exc:
                 response = {"result": {"resultMsg": f"NON_JSON_RESPONSE: {exc}"}}
+            except Exception as exc:
+                logger.error("[controller] 로또 자동 구매 실패 for user %s: %s", username, exc)
+                response = {"result": {"resultMsg": f"ERROR: {exc}"}}
             response['balance'] = _safe_balance()
-            send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+            purchase_results.append({"lottery_type": "lotto", "title": "로또 자동 구매", "response": response})
 
         time.sleep(3)
 
@@ -322,36 +327,49 @@ def buy():
                 response = {"result": {"resultMsg": f"NETWORK_ERROR: {exc}"}}
             except lotto645.NonJsonResponseError as exc:
                 response = {"result": {"resultMsg": f"NON_JSON_RESPONSE: {exc}"}}
+            except Exception as exc:
+                logger.error("[controller] 로또 수동 구매 실패 for user %s: %s", username, exc)
+                response = {"result": {"resultMsg": f"ERROR: {exc}"}}
             response['balance'] = _safe_balance()
-            send_message(1, 0, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+            purchase_results.append({"lottery_type": "lotto", "title": "로또 수동 구매", "response": response})
 
         time.sleep(3)
 
+        can_buy_win720 = True
         try:
             globalAuthCtrl.http_client.session.cookies.clear()
             globalAuthCtrl.login(username, password)
         except Exception as e:
             logger.error("[controller] 연금복권 구매 전 재로그인 실패 for user %s: %s", username, e)
-            continue
-
-        try:
-            response = _retry_purchase(
-                "연금복권 구매",
-                lambda: buy_win720(globalAuthCtrl, username),
-                attempts=int(os.environ.get("WIN720_PURCHASE_MAX_ATTEMPTS", "8")),
-                delay=float(os.environ.get("WIN720_PURCHASE_RETRY_DELAY", "2")),
-                reauth=lambda: globalAuthCtrl.login(username, password),
-                reauth_attempts=int(os.environ.get("WIN720_REAUTH_ATTEMPTS", "3")),
-            )
-            send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
-        except requests.RequestException as e:
-            logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
-            response = {"resultCode": "NETWORK_ERROR", "resultMsg": f"NETWORK_ERROR: {e}"}
+            can_buy_win720 = False
+            response = {"resultCode": "LOGIN_ERROR", "resultMsg": f"LOGIN_ERROR: {e}"}
             response["balance"] = _safe_balance()
-            send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
-        except Exception as e:
-            logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
-            continue
+            purchase_results.append({"lottery_type": "win720", "title": "연금복권 구매", "response": response})
+
+        if can_buy_win720:
+            try:
+                response = _retry_purchase(
+                    "연금복권 구매",
+                    lambda: buy_win720(globalAuthCtrl, username),
+                    attempts=int(os.environ.get("WIN720_PURCHASE_MAX_ATTEMPTS", "8")),
+                    delay=float(os.environ.get("WIN720_PURCHASE_RETRY_DELAY", "2")),
+                    reauth=lambda: globalAuthCtrl.login(username, password),
+                    reauth_attempts=int(os.environ.get("WIN720_REAUTH_ATTEMPTS", "3")),
+                )
+            except requests.RequestException as e:
+                logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
+                response = {"resultCode": "NETWORK_ERROR", "resultMsg": f"NETWORK_ERROR: {e}"}
+                response["balance"] = _safe_balance()
+            except Exception as e:
+                logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
+                response = {"resultCode": "ERROR", "resultMsg": f"ERROR: {e}"}
+                response["balance"] = _safe_balance()
+            purchase_results.append({"lottery_type": "win720", "title": "연금복권 구매", "response": response})
+
+        if purchase_results:
+            notify = notification.Notification()
+            logger.info("[controller] sending buying summary for user=%s: %s", username, purchase_results)
+            notify.send_buying_summary_message(username, purchase_results, telegram_bot_token, telegram_chat_id)
 
 
 def run():
