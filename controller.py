@@ -252,6 +252,16 @@ def buy():
                     attempts,
                     exc,
                 )
+                http_client = HttpClientSingleton.get_instance()
+                if hasattr(http_client, "reset_connection_pool"):
+                    http_client.reset_connection_pool()
+                if reauth and reauth_used < reauth_attempts and attempt % 2 == 0:
+                    reauth_used += 1
+                    logger.info("[controller] %s 네트워크 오류 후 재로그인합니다.", label)
+                    try:
+                        reauth()
+                    except Exception as login_exc:
+                        logger.error("[controller] %s 재로그인 실패: %s", label, login_exc)
                 if attempt < attempts:
                     time.sleep(delay * attempt)
         raise last_exc
@@ -317,13 +327,21 @@ def buy():
 
         time.sleep(3)
 
-        globalAuthCtrl.http_client.session.cookies.clear()
-        globalAuthCtrl.login(username, password)
+        try:
+            globalAuthCtrl.http_client.session.cookies.clear()
+            globalAuthCtrl.login(username, password)
+        except Exception as e:
+            logger.error("[controller] 연금복권 구매 전 재로그인 실패 for user %s: %s", username, e)
+            continue
 
         try:
             response = _retry_purchase(
                 "연금복권 구매",
                 lambda: buy_win720(globalAuthCtrl, username),
+                attempts=int(os.environ.get("WIN720_PURCHASE_MAX_ATTEMPTS", "8")),
+                delay=float(os.environ.get("WIN720_PURCHASE_RETRY_DELAY", "2")),
+                reauth=lambda: globalAuthCtrl.login(username, password),
+                reauth_attempts=int(os.environ.get("WIN720_REAUTH_ATTEMPTS", "3")),
             )
             send_message(1, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
         except requests.RequestException as e:

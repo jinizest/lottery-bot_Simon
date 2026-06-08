@@ -1,6 +1,8 @@
 import json
 import datetime
 import base64
+import os
+import time
 import requests
 import re
 
@@ -64,6 +66,7 @@ class Win720:
         jsessionid = auth_ctrl.get_current_session_id()
 
         self.keyCode = jsessionid
+        self._preflight_game(auth_ctrl)
         win720_round = self._get_round()
 
         makeAutoNum_ret = self._makeAutoNumbers(auth_ctrl, win720_round)
@@ -97,6 +100,46 @@ class Win720:
     def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
         return auth_ctrl.add_auth_cred_to_headers(self._REQ_HEADERS)
+
+    def _preflight_game(self, auth_ctrl: auth.AuthController) -> None:
+        """Warm up el.dhlottery.co.kr before the Win720 purchase POST chain."""
+        headers = self._generate_req_headers(auth_ctrl)
+        for url in (
+            "https://el.dhlottery.co.kr/game/pension720/game.jsp",
+            "https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72",
+        ):
+            try:
+                self.http_client.get(url, headers=headers)
+                return
+            except requests.RequestException as exc:
+                logger.warning("[win720] preflight failed url=%s error=%s", url, exc)
+                if hasattr(self.http_client, "reset_connection_pool"):
+                    self.http_client.reset_connection_pool()
+
+    def _post_purchase_step(self, step: str, url: str, headers: dict, data: dict) -> requests.Response:
+        max_attempts = int(os.getenv("WIN720_STEP_MAX_ATTEMPTS", "5"))
+        base_delay = float(os.getenv("WIN720_STEP_RETRY_DELAY", "1.5"))
+        last_exc = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info("[win720] %s attempt=%s/%s", step, attempt, max_attempts)
+                return self.http_client.post(url=url, headers=headers, data=data)
+            except requests.RequestException as exc:
+                last_exc = exc
+                logger.warning(
+                    "[win720] %s network error attempt=%s/%s error=%s",
+                    step,
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                if hasattr(self.http_client, "reset_connection_pool"):
+                    self.http_client.reset_connection_pool()
+                if attempt < max_attempts:
+                    time.sleep(base_delay * attempt)
+
+        raise last_exc
 
     def _extract_jsession_id(self, cookie_header: str) -> str:
         match = re.search(r"JSESSIONID=([^;]+)", cookie_header, re.IGNORECASE)
@@ -143,7 +186,8 @@ class Win720:
             "q": requests.utils.quote(self._encText(payload))
         }
 
-        res = self.http_client.post(
+        res = self._post_purchase_step(
+            "makeAutoNo",
             url="https://el.dhlottery.co.kr/makeAutoNo.do",
             headers=headers,
             data=data
@@ -159,7 +203,8 @@ class Win720:
             "q": requests.utils.quote(self._encText(payload))
         }
 
-        res = self.http_client.post(
+        res = self._post_purchase_step(
+            "makeOrderNo",
             url="https://el.dhlottery.co.kr/makeOrderNo.do",
             headers=headers,
             data=data
@@ -179,7 +224,8 @@ class Win720:
             "q": requests.utils.quote(self._encText(payload))
         }
 
-        res = self.http_client.post(
+        res = self._post_purchase_step(
+            "connPro",
             url="https://el.dhlottery.co.kr/connPro.do",
             headers=headers,
             data=data
