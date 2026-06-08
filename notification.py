@@ -10,22 +10,70 @@ common.setup_logging()
 logger = logging.getLogger(__name__)
 
 class Notification:
+
+    def build_lotto_buying_message(self, title: str, body: dict) -> str:
+        result = body.get("result", {}) if isinstance(body, dict) else {}
+        result_msg = self._stringify_result_msg(result.get("resultMsg", "FAILURE"))
+        balance = body.get("balance", "N/A") if isinstance(body, dict) else "N/A"
+        buy_round = result.get("buyRound", "알 수 없음")
+
+        if result_msg.upper() != "SUCCESS":
+            header = f"❌ {title} 실패 ({buy_round}회) :moneybag: 남은잔액 : {balance}"
+            return f"{html.escape(header)}\n{html.escape('사유: ' + result_msg)}"
+
+        lotto_number_str = self.make_lotto_number_message(result.get("arrGameChoiceNum", []))
+        header = f"✅ {title} 완료 ({buy_round}회) :moneybag: 남은잔액 : {balance}"
+        if not lotto_number_str:
+            return html.escape(header)
+        return f"{html.escape(header)}\n<pre>{html.escape(lotto_number_str)}</pre>"
+
+    def build_win720_buying_message(self, title: str, body: dict) -> str:
+        result_code = body.get("resultCode", "UNKNOWN") if isinstance(body, dict) else "UNKNOWN"
+        result_msg = body.get("resultMsg", "알 수 없는 오류") if isinstance(body, dict) else "알 수 없는 오류"
+        balance = body.get("balance", "N/A") if isinstance(body, dict) else "N/A"
+        result_msg_text = self._stringify_result_msg(result_msg)
+
+        win720_round = body.get("round", "알 수 없음") if isinstance(body, dict) else "알 수 없음"
+        if "|" in result_msg_text:
+            parts = result_msg_text.split("|")
+            if len(parts) > 3 and parts[3]:
+                win720_round = parts[3]
+
+        if result_code != '100':
+            header = f"❌ {title} 실패 ({win720_round}회) :moneybag: 남은잔액 : {balance}"
+            return f"{html.escape(header)}\n{html.escape('사유: ' + result_msg_text)}"
+
+        win720_number_str = self.make_win720_number_message(body.get("saleTicket", ""))
+        header = f"✅ {title} 완료 ({win720_round}회) :moneybag: 남은잔액 : {balance}"
+        if not win720_number_str:
+            return html.escape(header)
+        return f"{html.escape(header)}\n<pre>{html.escape(win720_number_str)}</pre>"
+
+    def send_buying_summary_message(self, userid: str, purchases: list, token: str, chat_id: str) -> None:
+        sections = []
+        for purchase in purchases:
+            lottery_type = purchase.get("lottery_type")
+            title = purchase.get("title", "구매")
+            body = purchase.get("response", {})
+            try:
+                if lottery_type == "lotto":
+                    sections.append(self.build_lotto_buying_message(title, body))
+                elif lottery_type == "win720":
+                    sections.append(self.build_win720_buying_message(title, body))
+                else:
+                    sections.append(html.escape(f"❌ {title} 처리 중 오류 발생: 알 수 없는 복권 유형"))
+            except Exception as e:
+                sections.append(html.escape(f"❌ {title} 알림 생성 중 오류 발생: {e}"))
+
+        if not sections:
+            return
+
+        message = f"{html.escape(userid + '님, 복권 구매 결과입니다.')}\n\n" + "\n\n".join(sections)
+        self._send_telegram(token, chat_id, message)
+
     def send_lotto_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
         try:
-            result = body.get("result", {})
-            result_msg = result.get("resultMsg", "FAILURE").upper()
-            balance = body.get("balance", "N/A")
-
-            if result_msg != "SUCCESS":
-                buy_round = result.get("buyRound", "알 수 없음")
-                message = f"{userid}님, {buy_round}회 로또 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg}"
-                self._send_telegram(token, chat_id, message, escape_message=True)
-                return
-
-            lotto_number_str = self.make_lotto_number_message(result.get("arrGameChoiceNum", []))
-            buy_round = result.get("buyRound", "알 수 없음")
-            lotto_block = f"<pre>{html.escape(lotto_number_str)}</pre>"
-            message = f"{html.escape(userid + '님, ' + str(buy_round) + '회 로또 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{lotto_block}"
+            message = f"{html.escape(userid + '님, 로또 구매 결과입니다.')}\n" + self.build_lotto_buying_message("로또 구매", body)
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
             error_message = f"{userid}님, 로또 구매 처리 중 오류 발생: {e}"
@@ -47,30 +95,7 @@ class Notification:
 
     def send_win720_buying_message(self, userid: str, body: dict, token: str, chat_id: str) -> None:
         try:
-            result_code = body.get("resultCode", "UNKNOWN")
-            result_msg = body.get("resultMsg", "알 수 없는 오류")
-            balance = body.get("balance", "N/A")
-
-            result_msg_text = self._stringify_result_msg(result_msg)
-
-            if result_code != '100':
-                win720_round = body.get("round", "알 수 없음")
-                if "|" in result_msg_text:
-                    parts = result_msg_text.split("|")
-                    if len(parts) > 3 and parts[3]:
-                        win720_round = parts[3]
-                message = f"{userid}님, {win720_round}회 연금복권 구매 실패!!! :moneybag: 남은잔액 : {balance}\n사유: {result_msg_text}"
-                self._send_telegram(token, chat_id, message, escape_message=True)
-                return
-
-            win720_round = body.get("round", "알 수 없음")
-            if "|" in result_msg_text:
-                parts = result_msg_text.split("|")
-                if len(parts) > 3 and parts[3]:
-                    win720_round = parts[3]
-            win720_number_str = self.make_win720_number_message(body.get("saleTicket", ""))
-            win720_block = f"<pre>{html.escape(win720_number_str)}</pre>"
-            message = f"{html.escape(userid + '님, ' + str(win720_round) + '회 연금복권 구매 완료 :moneybag: 남은잔액 : ' + str(balance))}\n{win720_block}"
+            message = f"{html.escape(userid + '님, 연금복권 구매 결과입니다.')}\n" + self.build_win720_buying_message("연금복권 구매", body)
             self._send_telegram(token, chat_id, message)
         except KeyError as e:
             error_message = f"{userid}님, 연금복권 구매 처리 중 오류 발생: {e}"
