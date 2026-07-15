@@ -8,7 +8,7 @@ from datetime import timedelta
 from enum import Enum
 
 from bs4 import BeautifulSoup as BS
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import auth
 import common
@@ -461,21 +461,23 @@ class Lotto645:
 
                     game_dtl = ticket.get("game_dtl", [])
                     win_num = ticket.get("win_num", [])
+                    main_win_nums, bonus_num = self._split_lotto645_winning_numbers(win_num)
 
                     for i, game in enumerate(game_dtl):
                         slot_label = common.SLOTS[i] if i < len(common.SLOTS) else "?"
                         label = f"{ticket_index}-{slot_label}"
 
-                        rank = game.get("rank", "0")
-                        status = "0등" if rank == "0" else f"{rank}등"
-
                         method = self._determine_method(game, ticket, i)
 
                         nums = game.get("num", [])
+                        status = self._calculate_lotto645_status(nums, main_win_nums, bonus_num)
                         formatted_nums = []
                         for num in nums:
-                            if num in win_num:
-                                formatted_nums.append(f"✨{num}")
+                            normalized_num = self._normalize_lotto645_number(num)
+                            if normalized_num in main_win_nums:
+                                formatted_nums.append(f"✨{normalized_num}")
+                            elif bonus_num and normalized_num == bonus_num:
+                                formatted_nums.append(f"⭐{normalized_num}")
                             else:
                                 formatted_nums.append(str(num))
 
@@ -483,7 +485,9 @@ class Lotto645:
                             "label": label,
                             "status": status,
                             "method": method,
-                            "result": formatted_nums
+                            "result": formatted_nums,
+                            "winning_numbers": main_win_nums,
+                            "bonus_number": bonus_num,
                         })
 
                 except (requests.RequestException, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
@@ -499,6 +503,38 @@ class Lotto645:
             raise
 
         return result_data
+
+    def _normalize_lotto645_number(self, value: object) -> str:
+        try:
+            return f"{int(str(value).strip()):02d}"
+        except (TypeError, ValueError):
+            return str(value).strip()
+
+    def _split_lotto645_winning_numbers(self, win_num: list) -> Tuple[List[str], Optional[str]]:
+        normalized = [self._normalize_lotto645_number(num) for num in win_num if str(num).strip()]
+        main_numbers = normalized[:6]
+        bonus_number = normalized[6] if len(normalized) >= 7 else None
+        return main_numbers, bonus_number
+
+    def _calculate_lotto645_status(self, nums: list, main_win_nums: List[str], bonus_num: Optional[str]) -> str:
+        selected_numbers = {self._normalize_lotto645_number(num) for num in nums}
+        main_match_count = len(selected_numbers.intersection(main_win_nums))
+        bonus_matched = bool(bonus_num and bonus_num in selected_numbers)
+
+        if main_match_count == 6:
+            rank = 1
+        elif main_match_count == 5 and bonus_matched:
+            rank = 2
+        elif main_match_count == 5:
+            rank = 3
+        elif main_match_count == 4:
+            rank = 4
+        elif main_match_count == 3:
+            rank = 5
+        else:
+            rank = 0
+
+        return "0등" if rank == 0 else f"{rank}등"
 
     def _determine_method(self, game: dict, ticket: dict, game_index: Optional[int] = None) -> str:
         method = self._extract_method_from_mapping(game)
