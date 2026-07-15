@@ -170,6 +170,61 @@ def _send_login_failure_summary(username: str, reason: str, telegram_bot_token: 
         telegram_chat_id,
     )
 
+
+def _sanitize_purchase_results_for_log(purchases):
+    sensitive_keys = {
+        "oltInetUserId",
+        "barCode1",
+        "barCode2",
+        "barCode3",
+        "barCode4",
+        "barCode5",
+        "barCode6",
+        "saleTicket",
+        "failTicket",
+        "prchsLtNoInfoLstCn",
+    }
+
+    def _sanitize(value, key=None):
+        if key in sensitive_keys:
+            return "***" if value else value
+        if key == "arrGameChoiceNum" and isinstance(value, list):
+            return [str(item)[:2] + "***" for item in value]
+        if isinstance(value, dict):
+            return {child_key: _sanitize(child_value, child_key) for child_key, child_value in value.items()}
+        if isinstance(value, list):
+            return [_sanitize(item) for item in value]
+        return value
+
+    return _sanitize(purchases)
+
+
+def _parse_won_amount(balance: str):
+    if not isinstance(balance, str):
+        return None
+    digits = "".join(ch for ch in balance if ch.isdigit())
+    return int(digits) if digits else None
+
+
+def _format_won_amount(amount: int) -> str:
+    return f"{amount:,}원"
+
+
+def _estimate_win720_balance(response: dict, previous_balance: str):
+    previous_amount = _parse_won_amount(previous_balance)
+    if previous_amount is None or not isinstance(response, dict):
+        return None
+
+    try:
+        sale_count = int(response.get("saleCnt") or 0)
+    except (TypeError, ValueError):
+        sale_count = 0
+
+    if sale_count <= 0 or response.get("resultCode") != "100":
+        return None
+
+    return _format_won_amount(max(previous_amount - (sale_count * 1000), 0)) + " (추정)"
+
 def buy():
     load_dotenv()
 
@@ -365,6 +420,7 @@ def buy():
             purchase_results.append({"lottery_type": "win720", "title": "연금복권 구매", "response": response})
 
         if can_buy_win720:
+            win720_previous_balance = getattr(globalAuthCtrl, "_last_balance", None)
             try:
                 response = _retry_purchase(
                     "연금복권 구매",
@@ -382,11 +438,27 @@ def buy():
                 logger.error("[controller] 연금복권 구매 실패 for user %s: %s", username, e)
                 response = {"resultCode": "ERROR", "resultMsg": f"ERROR: {e}"}
                 response["balance"] = _safe_balance()
+            else:
+                fetched_balance = _safe_balance()
+                estimated_balance = _estimate_win720_balance(response, win720_previous_balance)
+                if estimated_balance and fetched_balance == win720_previous_balance:
+                    logger.warning(
+                        "[controller] 연금복권 구매 후 잔액 조회가 이전 캐시값과 같아 차감 예상 잔액을 사용합니다. previous=%s estimated=%s",
+                        win720_previous_balance,
+                        estimated_balance,
+                    )
+                    response["balance"] = estimated_balance
+                else:
+                    response["balance"] = fetched_balance
             purchase_results.append({"lottery_type": "win720", "title": "연금복권 구매", "response": response})
 
         if purchase_results:
             notify = notification.Notification()
-            logger.info("[controller] sending buying summary for user=%s: %s", username, purchase_results)
+            logger.info(
+                "[controller] sending buying summary for user=%s: %s",
+                username,
+                _sanitize_purchase_results_for_log(purchase_results),
+            )
             notify.send_buying_summary_message(username, purchase_results, telegram_bot_token, telegram_chat_id)
 
 
