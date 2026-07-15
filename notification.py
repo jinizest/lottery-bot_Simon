@@ -163,11 +163,13 @@ class Notification:
                     raw_num = re.search(r'\d+', num).group()
                     formatted_num = f"{int(raw_num):02d}"
                     if '✨' in num:
+                        formatted_nums.append(f"<b>[{formatted_num}]</b>")
+                    elif '⭐' in num:
                         formatted_nums.append(f"[{formatted_num}]")
                     else:
                         formatted_nums.append(f" {formatted_num} ")
 
-                formatted_line = f"{prefix} " + "".join(formatted_nums)
+                formatted_line = html.escape(prefix) + " " + "".join(formatted_nums)
                 formatted_lines.append(formatted_line)
 
             formatted_results = "\n".join(formatted_lines)
@@ -177,8 +179,8 @@ class Notification:
             else:
                 winning_message = f"{userid}님, 로또 *{round_val}회* - 다음 기회에... 🫠"
 
-            # Send formatted results inside an HTML <pre> block and escape content
-            results_block = f"<pre>{html.escape(formatted_results)}</pre>"
+            # Keep individual winning-number markup visible while escaping dynamic text above.
+            results_block = formatted_results
             # escape winning_message too to avoid accidental HTML injection
             self._send_telegram(token, chat_id, f"{results_block}\n{html.escape(winning_message)}")
         except KeyError:
