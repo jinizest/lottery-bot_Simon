@@ -243,19 +243,36 @@ class AuthController:
             )
 
     def _is_action_required_response(self, res: requests.Response) -> bool:
-        url = res.url or ""
+        url = (res.url or "").lower()
         text = res.text or ""
-        action_markers = (
-            "ExpryPswdNoti",
-            "비밀번호 변경",
-            "비밀번호를 변경",
-            "비밀번호 변경 안내",
-            "다음에 변경",
-            "약관",
-            "본인확인",
-            "휴면",
+        lowered_text = text.lower()
+
+        url_markers = (
+            "exprypswdnoti",
+            "agreement",
+            "certification",
+            "sleep",
         )
-        return any(marker.lower() in url.lower() or marker.lower() in text.lower() for marker in action_markers)
+        if any(marker in url for marker in url_markers):
+            return True
+
+        # Keep these checks intentionally specific. Authenticated pages commonly
+        # contain generic footer/menu words such as "약관" or "본인확인"; treating
+        # those as action-required markers makes a successful login look failed.
+        text_markers = (
+            "exprypswdnoti",
+            "비밀번호 변경 안내",
+            "비밀번호를 변경해",
+            "비밀번호를 변경 하",
+            "다음에 변경",
+            "약관에 동의",
+            "약관 동의",
+            "본인확인이 필요",
+            "본인 확인이 필요",
+            "휴면계정",
+            "휴면 계정",
+        )
+        return any(marker in lowered_text for marker in text_markers)
 
     def _is_login_url(self, url: str) -> bool:
         lowered = (url or "").lower()
