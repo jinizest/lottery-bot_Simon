@@ -259,6 +259,13 @@ class AuthController:
         # Keep these checks intentionally specific. Authenticated pages commonly
         # contain generic footer/menu words such as "약관" or "본인확인"; treating
         # those as action-required markers makes a successful login look failed.
+        # If the page already exposes a logout affordance, it is an authenticated
+        # page and should not be classified as an additional-login-action page
+        # based on body text alone. URL markers above still take precedence for
+        # explicit password/terms/certification flows.
+        if "로그아웃" in text or "logout" in lowered_text:
+            return False
+
         text_markers = (
             "exprypswdnoti",
             "비밀번호 변경 안내",

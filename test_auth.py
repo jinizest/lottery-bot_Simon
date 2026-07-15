@@ -53,3 +53,17 @@ def test_action_required_detects_specific_password_notice():
     )
 
     assert controller._is_action_required_response(response) is True
+
+
+def test_action_required_ignores_authenticated_page_with_specific_footer_terms():
+    controller = AuthController.__new__(AuthController)
+    response = make_response(text="""
+        <html>
+          <body>
+            <a href="/userSsl.do?method=logout">로그아웃</a>
+            <section>약관 동의 이력과 비밀번호를 변경해 주세요 안내 링크</section>
+          </body>
+        </html>
+    """)
+
+    assert controller._is_action_required_response(response) is False
