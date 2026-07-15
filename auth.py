@@ -7,6 +7,7 @@ import requests
 import json
 import base64
 import binascii
+import re
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from HttpClient import HttpClientSingleton
@@ -17,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 class SessionValidationError(RuntimeError):
     pass
+
+
+class LoginValidationError(RuntimeError):
+    pass
+
 
 class AuthController:
     _REQ_HEADERS = {
@@ -136,18 +142,167 @@ class AuthController:
     def _try_login(self, headers: dict, data: dict):
         assert isinstance(headers, dict)
         assert isinstance(data, dict)
-        
+
+        url = "https://www.dhlottery.co.kr/login/securityLoginCheck.do"
+        logger.info("[auth] Login request url=%s", url)
         res = self.http_client.post(
-            "https://www.dhlottery.co.kr/login/securityLoginCheck.do",
+            url,
             headers=headers,
             data=data,
         )
-        
+
+        self._log_login_response_summary(res)
+        self._validate_login_response(res)
+
         new_jsessionid = self._get_j_session_id_from_response(res)
         if new_jsessionid:
              self._update_auth_cred(new_jsessionid)
+             logger.info(
+                 "[auth] Login cookie updated cookie_names=%s",
+                 self._get_safe_cookie_names(),
+             )
+        else:
+             logger.warning(
+                 "[auth] Login response did not include JSESSIONID cookie cookie_names=%s",
+                 self._get_safe_cookie_names(),
+             )
+
+        if not self.validate_session():
+            raise LoginValidationError(
+                "Login HTTP request completed, but authenticated session validation failed."
+            )
 
         return res
+
+    def _log_login_response_summary(self, res: requests.Response) -> None:
+        content_type = res.headers.get("Content-Type", "")
+        logger.info(
+            "[auth] Login response received url=%s status=%s content_type=%s final_url=%s",
+            res.request.url if res.request else "unknown",
+            res.status_code,
+            content_type,
+            res.url,
+        )
+        logger.info("[auth] Login response cookie_names=%s", self._get_safe_cookie_names())
+
+        parsed = self._parse_json_safely(res)
+        if isinstance(parsed, dict):
+            logger.info(
+                "[auth] Login response json_summary=%s",
+                self._summarize_json(parsed),
+            )
+            return
+
+        logger.info(
+            "[auth] Login response body_preview=%s",
+            self._safe_text_preview(res.text),
+        )
+
+    def _validate_login_response(self, res: requests.Response) -> None:
+        parsed = self._parse_json_safely(res)
+        if isinstance(parsed, dict):
+            result_code = self._find_first_value(
+                parsed,
+                ("resultCode", "resultCd", "returnCode", "code", "status"),
+            )
+            result_message = self._find_first_value(
+                parsed,
+                ("resultMsg", "message", "msg", "returnMsg", "errorMessage"),
+            )
+            if result_code and str(result_code).strip() not in ("0", "00", "000", "SUCCESS", "success", "OK", "ok", "Y"):
+                raise LoginValidationError(
+                    "Login response indicates failure "
+                    f"result_code={result_code} result_message={self._sanitize_log_text(result_message)}"
+                )
+            if result_message and self._contains_login_failure_keyword(str(result_message)):
+                raise LoginValidationError(
+                    "Login response contains failure message "
+                    f"result_message={self._sanitize_log_text(result_message)}"
+                )
+            return
+
+        text = res.text or ""
+        if self._contains_login_failure_keyword(text):
+            raise LoginValidationError(
+                "Login response body contains failure keywords "
+                f"body_preview={self._safe_text_preview(text)}"
+            )
+
+    def _parse_json_safely(self, res: requests.Response):
+        content_type = res.headers.get("Content-Type", "")
+        text = (res.text or "").strip()
+        if "json" not in content_type.lower() and not text.startswith(("{", "[")):
+            return None
+        try:
+            return res.json()
+        except ValueError:
+            return None
+
+    def _summarize_json(self, value) -> dict:
+        if not isinstance(value, dict):
+            return {"type": type(value).__name__}
+        summary = {"keys": sorted(value.keys())}
+        for key in ("resultCode", "resultCd", "returnCode", "code", "status", "resultMsg", "message", "msg", "returnMsg", "errorMessage"):
+            found = self._find_first_value(value, (key,))
+            if found is not None:
+                summary[key] = self._sanitize_log_text(found)
+        return summary
+
+    def _find_first_value(self, value, keys: tuple):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in keys:
+                    return child
+                found = self._find_first_value(child, keys)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = self._find_first_value(child, keys)
+                if found is not None:
+                    return found
+        return None
+
+    def _contains_login_failure_keyword(self, text: str) -> bool:
+        lowered = text.lower()
+        failure_keywords = (
+            "로그인 실패",
+            "비밀번호",
+            "아이디",
+            "인증",
+            "본인확인",
+            "휴면",
+            "차단",
+            "captcha",
+            "login failed",
+            "unauthorized",
+            "error",
+        )
+        success_keywords = ("로그아웃", "logout")
+        return any(keyword in lowered for keyword in failure_keywords) and not any(
+            keyword in lowered for keyword in success_keywords
+        )
+
+    def _safe_text_preview(self, text: str, limit: int = 500) -> str:
+        sanitized = self._sanitize_log_text(text)
+        return sanitized[:limit]
+
+    def _sanitize_log_text(self, value) -> str:
+        if value is None:
+            return ""
+        text = str(value)
+        text = re.sub(r"[0-9a-fA-F]{64,}", "[REDACTED_HEX]", text)
+        text = re.sub(r"(?i)(password|passwd|pswd|userPswdEncn|userId|inpUserId)=[^&\s]+", r"\1=[REDACTED]", text)
+        text = re.sub(
+            r"(?i)(['\"]?(?:password|passwd|pswd|userPswdEncn|userId|inpUserId)['\"]?\s*:\s*)['\"]?[^,'\"}]+['\"]?",
+            r"\1[REDACTED]",
+            text,
+        )
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    def _get_safe_cookie_names(self) -> list:
+        return sorted({cookie.name for cookie in self.http_client.session.cookies})
 
     def _update_auth_cred(self, j_session_id: str) -> None:
         assert isinstance(j_session_id, str)
@@ -266,14 +421,39 @@ class AuthController:
              return "확인 불가"
 
     def validate_session(self) -> bool:
+        url = "https://dhlottery.co.kr/mypage/home"
         try:
-            res = self.http_client.get("https://dhlottery.co.kr/mypage/home")
+            res = self.http_client.session.get(url, timeout=self.http_client.timeout)
         except requests.RequestException as exc:
             logger.warning(
-                "[auth] Session validation request failed (treating as unknown): %s",
+                "[auth] Session validation request failed url=%s error=%s",
+                url,
                 exc,
             )
-            return True
+            return False
+
+        logger.info(
+            "[auth] Session validation response status=%s final_url=%s cookie_names=%s",
+            res.status_code,
+            res.url,
+            self._get_safe_cookie_names(),
+        )
+
+        if res.status_code in (401, 403):
+            logger.warning(
+                "[auth] Session validation unauthorized status=%s body_preview=%s",
+                res.status_code,
+                self._safe_text_preview(res.text),
+            )
+            return False
+
+        if res.status_code >= 400:
+            logger.warning(
+                "[auth] Session validation failed status=%s body_preview=%s",
+                res.status_code,
+                self._safe_text_preview(res.text),
+            )
+            return False
 
         if "user.do?method=login" in res.url:
             logger.info("[auth] Session validation detected login redirect.")
