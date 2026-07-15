@@ -24,6 +24,10 @@ class LoginValidationError(RuntimeError):
     pass
 
 
+class LoginActionRequiredError(LoginValidationError):
+    pass
+
+
 class AuthController:
     _REQ_HEADERS = {
         "User-Agent": USER_AGENT,
@@ -152,6 +156,7 @@ class AuthController:
         )
 
         self._log_login_response_summary(res)
+        self._raise_if_login_action_required(res)
         self._validate_login_response(res)
 
         new_jsessionid = self._get_j_session_id_from_response(res)
@@ -227,6 +232,38 @@ class AuthController:
                 "Login response body contains failure keywords "
                 f"body_preview={self._safe_text_preview(text)}"
             )
+
+
+    def _raise_if_login_action_required(self, res: requests.Response) -> None:
+        if self._is_action_required_response(res):
+            raise LoginActionRequiredError(
+                "로그인 후 추가 조치가 필요합니다. "
+                "동행복권 웹사이트에서 비밀번호 변경 알림/약관 동의/본인확인 등을 처리한 뒤 다시 실행하세요. "
+                f"final_url={res.url}"
+            )
+
+    def _is_action_required_response(self, res: requests.Response) -> bool:
+        url = res.url or ""
+        text = res.text or ""
+        action_markers = (
+            "ExpryPswdNoti",
+            "비밀번호 변경",
+            "비밀번호를 변경",
+            "비밀번호 변경 안내",
+            "다음에 변경",
+            "약관",
+            "본인확인",
+            "휴면",
+        )
+        return any(marker.lower() in url.lower() or marker.lower() in text.lower() for marker in action_markers)
+
+    def _is_login_url(self, url: str) -> bool:
+        lowered = (url or "").lower()
+        return (
+            "user.do?method=login" in lowered
+            or lowered.rstrip("/").endswith("/login")
+            or "/login/" in lowered
+        )
 
     def _parse_json_safely(self, res: requests.Response):
         content_type = res.headers.get("Content-Type", "")
@@ -333,8 +370,8 @@ class AuthController:
             
     def get_user_balance(self) -> str:
         try:
-             connect_timeout = int(os.getenv("BALANCE_CONNECT_TIMEOUT", "7"))
-             read_timeout = int(os.getenv("BALANCE_READ_TIMEOUT", "15"))
+             connect_timeout = int(os.getenv("BALANCE_CONNECT_TIMEOUT", "4"))
+             read_timeout = int(os.getenv("BALANCE_READ_TIMEOUT", "8"))
              timeout = (connect_timeout, read_timeout)
              max_attempts = int(os.getenv("BALANCE_MAX_ATTEMPTS", "6"))
 
@@ -375,7 +412,7 @@ class AuthController:
                              exc,
                          )
                          if attempt < max_attempts:
-                             time.sleep(0.75 * attempt)
+                             time.sleep(float(os.getenv("BALANCE_RETRY_DELAY", "0.3")) * attempt)
                  raise last_exc
 
              _refresh_mypage()
@@ -462,8 +499,12 @@ class AuthController:
             )
             return False
 
-        if "user.do?method=login" in res.url:
-            logger.info("[auth] Session validation detected login redirect.")
+        if self._is_login_url(res.url):
+            logger.info("[auth] Session validation detected login redirect url=%s", res.url)
+            return False
+
+        if self._is_action_required_response(res):
+            logger.info("[auth] Session validation detected login action required url=%s", res.url)
             return False
 
         text = res.text.lower()

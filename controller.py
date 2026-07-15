@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str, manual_numbers: list = None):
     lotto = lotto645.Lotto645()
     _mode = lotto645.Lotto645Mode[mode.upper()]
-    response = lotto.buy_lotto645(authCtrl, cnt, _mode, manual_numbers=manual_numbers)
-    response['balance'] = authCtrl.get_user_balance()
-    return response
+    return lotto.buy_lotto645(authCtrl, cnt, _mode, manual_numbers=manual_numbers)
 
 
 def check_winning_lotto645(authCtrl: auth.AuthController) -> dict:
@@ -32,9 +30,7 @@ def check_winning_lotto645(authCtrl: auth.AuthController) -> dict:
 
 def buy_win720(authCtrl: auth.AuthController, username: str):
     pension = win720.Win720()
-    response = pension.buy_Win720(authCtrl, username)
-    response['balance'] = authCtrl.get_user_balance()
-    return response
+    return pension.buy_Win720(authCtrl, username)
 
 
 def check_winning_win720(authCtrl: auth.AuthController) -> dict:
@@ -153,6 +149,26 @@ def check_win():
 
         response = check_winning_win720(globalAuthCtrl)
         send_message(0, 1, response=response, token=telegram_bot_token, chat_id=telegram_chat_id, userid=username)
+
+
+def _send_login_failure_summary(username: str, reason: str, telegram_bot_token: str, telegram_chat_id: str) -> None:
+    notify = notification.Notification()
+    response = {
+        "result": {
+            "resultMsg": (
+                "LOGIN_FAILED: 로그인이 완료되지 않아 구매를 중단했습니다. "
+                "비밀번호 변경 알림/약관 동의/본인확인 등 추가 조치가 뜨면 "
+                f"동행복권 웹사이트에서 처리한 뒤 다시 실행하세요. 상세: {reason}"
+            )
+        },
+        "balance": "조회 안함",
+    }
+    notify.send_buying_summary_message(
+        username,
+        [{"lottery_type": "lotto", "title": "로그인", "response": response}],
+        telegram_bot_token,
+        telegram_chat_id,
+    )
 
 def buy():
     load_dotenv()
@@ -281,12 +297,14 @@ def buy():
                 globalAuthCtrl.login(username, password)
             except Exception as e:
                 logger.error("[controller] 로그인 실패 for user %s: %s", username, e)
+                _send_login_failure_summary(username, str(e), telegram_bot_token, telegram_chat_id)
                 continue
         except Exception:
             try:
                 globalAuthCtrl.login(username, password)
             except Exception as e:
                 logger.error("[controller] 로그인 실패 for user %s: %s", username, e)
+                _send_login_failure_summary(username, str(e), telegram_bot_token, telegram_chat_id)
                 continue
 
         def _safe_balance() -> str:
@@ -343,7 +361,7 @@ def buy():
             logger.error("[controller] 연금복권 구매 전 재로그인 실패 for user %s: %s", username, e)
             can_buy_win720 = False
             response = {"resultCode": "LOGIN_ERROR", "resultMsg": f"LOGIN_ERROR: {e}"}
-            response["balance"] = _safe_balance()
+            response["balance"] = "조회 안함"
             purchase_results.append({"lottery_type": "win720", "title": "연금복권 구매", "response": response})
 
         if can_buy_win720:

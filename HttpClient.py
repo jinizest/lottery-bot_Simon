@@ -22,11 +22,11 @@ class HttpClient:
         request_delay: float = None,
     ):
         self.session = requests.Session()
-        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "12"))
-        read = read_timeout or int(os.getenv("READ_TIMEOUT", str(timeout)))
+        connect = connect_timeout or int(os.getenv("CONNECT_TIMEOUT", "6"))
+        read = read_timeout or int(os.getenv("READ_TIMEOUT", "10"))
         self.timeout = (connect, read)
         self.request_delay = request_delay if request_delay is not None else float(
-            os.getenv("REQUEST_DELAY", "0.5")
+            os.getenv("REQUEST_DELAY", "0.2")
         )
         self.max_retries = max_retries if max_retries is not None else int(
             os.getenv("HTTP_MAX_RETRIES", "4")
@@ -39,7 +39,7 @@ class HttpClient:
             connect=self.max_retries,
             read=self.max_retries,
             status=self.max_retries,
-            backoff_factor=float(os.getenv("HTTP_BACKOFF_FACTOR", "1.0")),
+            backoff_factor=float(os.getenv("HTTP_BACKOFF_FACTOR", "0.3")),
             status_forcelist=(429, 500, 502, 503, 504),
             allowed_methods=None,
             raise_on_status=False,
