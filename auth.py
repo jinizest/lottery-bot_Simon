@@ -133,8 +133,8 @@ class AuthController:
         for cookie in res.cookies:
             if cookie.name == "JSESSIONID":
                 return cookie.value
-        
-        return self.get_current_session_id()
+
+        return ""
 
     def _generate_req_headers(self):
         return copy.deepcopy(self._REQ_HEADERS)
@@ -158,12 +158,12 @@ class AuthController:
         if new_jsessionid:
              self._update_auth_cred(new_jsessionid)
              logger.info(
-                 "[auth] Login cookie updated cookie_names=%s",
+                 "[auth] Login JSESSIONID cookie updated cookie_names=%s",
                  self._get_safe_cookie_names(),
              )
         else:
-             logger.warning(
-                 "[auth] Login response did not include JSESSIONID cookie cookie_names=%s",
+             logger.info(
+                 "[auth] Login response did not include JSESSIONID; preserving server-issued cookies cookie_names=%s",
                  self._get_safe_cookie_names(),
              )
 
@@ -307,23 +307,25 @@ class AuthController:
     def _update_auth_cred(self, j_session_id: str) -> None:
         assert isinstance(j_session_id, str)
         self._AUTH_CRED = j_session_id
-        
-        self.http_client.session.cookies.set("JSESSIONID", j_session_id, domain=".dhlottery.co.kr")
+
+        if j_session_id:
+             self.http_client.session.cookies.set("JSESSIONID", j_session_id, domain=".dhlottery.co.kr")
 
         wmonid = None
         for cookie in self.http_client.session.cookies:
              if cookie.name == "WMONID":
                  wmonid = cookie.value
                  break
-        
+
         if wmonid:
              self.http_client.session.cookies.set("WMONID", wmonid, domain=".dhlottery.co.kr")
 
     def get_current_session_id(self) -> str:
-        for cookie in self.http_client.session.cookies:
-            if cookie.name in ["JSESSIONID", "DHJSESSIONID", "WMONID"]:
-                return cookie.value
-        
+        for cookie_name in ("JSESSIONID", "DHJSESSIONID", "WMONID"):
+            for cookie in self.http_client.session.cookies:
+                if cookie.name == cookie_name:
+                    return cookie.value
+
         if self._AUTH_CRED:
             return self._AUTH_CRED
 
@@ -421,9 +423,14 @@ class AuthController:
              return "확인 불가"
 
     def validate_session(self) -> bool:
-        url = "https://dhlottery.co.kr/mypage/home"
+        url = "https://www.dhlottery.co.kr/mypage/home"
+        headers = copy.deepcopy(self._REQ_HEADERS)
+        headers.update({
+            "Origin": "https://www.dhlottery.co.kr",
+            "Referer": "https://www.dhlottery.co.kr/common.do?method=main",
+        })
         try:
-            res = self.http_client.session.get(url, timeout=self.http_client.timeout)
+            res = self.http_client.session.get(url, headers=headers, timeout=self.http_client.timeout)
         except requests.RequestException as exc:
             logger.warning(
                 "[auth] Session validation request failed url=%s error=%s",
